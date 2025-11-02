@@ -93,8 +93,21 @@ public class JesExporter {
         pw.println("    component ParticleEmitter2D {");
         pw.println("      x: " + pe.getX());
         pw.println("      y: " + pe.getY());
-        // Note: ParticleEmitter2D doesn't expose getters for all properties
-        // Would need to add them for complete export
+        pw.println("      emissionRate: " + pe.getEmissionRate());
+        pw.println("      minLife: " + pe.getMinLife());
+        pw.println("      maxLife: " + pe.getMaxLife());
+        pw.println("      minSize: " + pe.getMinSize());
+        pw.println("      maxSize: " + pe.getMaxSize());
+        pw.println("      endSizeScale: " + pe.getEndSizeScale());
+        pw.println("      minSpeed: " + pe.getMinSpeed());
+        pw.println("      maxSpeed: " + pe.getMaxSpeed());
+        pw.println("      minAngle: " + pe.getMinAngle());
+        pw.println("      maxAngle: " + pe.getMaxAngle());
+        pw.println("      gravityY: " + pe.getGravityY());
+        pw.println("      startColor: rgb(" + pe.getStartR() + "," + pe.getStartG() + "," + pe.getStartB() + "," + pe.getStartA() + ")");
+        pw.println("      endColor: rgb(" + pe.getEndR() + "," + pe.getEndG() + "," + pe.getEndB() + "," + pe.getEndA() + ")");
+        if (pe.getTexture() != null) pw.println("      texture: \"" + escapeString(pe.getTexture()) + "\"");
+        pw.println("      additive: " + pe.isAdditive());
         pw.println("    }");
       }
       

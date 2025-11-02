@@ -48,23 +48,44 @@ public class ParticleEmitter2D extends Entity2D {
   public ParticleEmitter2D() {}
   
   public void setEmissionRate(double rate) { this.emissionRate = rate; }
+  public double getEmissionRate() { return emissionRate; }
   public void setMaxParticles(int max) { this.maxParticles = max; }
   public void setEmitting(boolean emit) { this.emitting = emit; }
   public void setLifeRange(double min, double max) { this.minLife = min; this.maxLife = max; }
+  public double getMinLife() { return minLife; }
+  public double getMaxLife() { return maxLife; }
   public void setSizeRange(double min, double max, double endScale) { 
     this.minSize = min; this.maxSize = max; this.endSizeScale = endScale; 
   }
+  public double getMinSize() { return minSize; }
+  public double getMaxSize() { return maxSize; }
+  public double getEndSizeScale() { return endSizeScale; }
   public void setSpeedRange(double min, double max) { this.minSpeed = min; this.maxSpeed = max; }
+  public double getMinSpeed() { return minSpeed; }
+  public double getMaxSpeed() { return maxSpeed; }
   public void setAngleRange(double min, double max) { this.minAngle = min; this.maxAngle = max; }
+  public double getMinAngle() { return minAngle; }
+  public double getMaxAngle() { return maxAngle; }
   public void setGravity(double gy) { this.gravityY = gy; }
+  public double getGravityY() { return gravityY; }
   public void setStartColor(double r, double g, double b, double a) {
     this.startR = r; this.startG = g; this.startB = b; this.startA = a;
   }
+  public double getStartR() { return startR; }
+  public double getStartG() { return startG; }
+  public double getStartB() { return startB; }
+  public double getStartA() { return startA; }
   public void setEndColor(double r, double g, double b, double a) {
     this.endR = r; this.endG = g; this.endB = b; this.endA = a;
   }
+  public double getEndR() { return endR; }
+  public double getEndG() { return endG; }
+  public double getEndB() { return endB; }
+  public double getEndA() { return endA; }
   public void setTexture(String path) { this.texture = path; }
+  public String getTexture() { return texture; }
   public void setAdditive(boolean add) { this.useAdditive = add; }
+  public boolean isAdditive() { return useAdditive; }
   
   public void burst(int count) {
     for (int i = 0; i < count && particles.size() < maxParticles; i++) {

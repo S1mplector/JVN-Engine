@@ -50,6 +50,20 @@ public class JesScene2D extends Scene2DBase {
   public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
   public java.util.List<Binding> exportBindings() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(bindings)); }
   public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
+  public boolean rename(String oldName, String newName) {
+    if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
+    if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
+    Entity2D e = named.remove(oldName);
+    if (e == null) return false;
+    named.put(newName, e);
+    return true;
+  }
+  public boolean removeEntity(String name) {
+    if (name == null) return false;
+    Entity2D e = named.remove(name);
+    if (e != null) { remove(e); return true; }
+    return false;
+  }
 
   @Override
   public void update(long deltaMs) {
