@@ -43,6 +43,8 @@ public class JesScene2D extends Scene2DBase {
   public void addBinding(String key, String action, Map<String,Object> props) { bindings.add(new Binding(key, action, props)); }
   public void registerEntity(String name, Entity2D e) { if (name != null && !name.isBlank() && e != null && !named.containsKey(name)) named.put(name, e); }
   public void setTimeline(List<JesAst.TimelineAction> tl) { this.timeline = tl == null ? new ArrayList<>() : new ArrayList<>(tl); this.tlIndex = 0; this.tlElapsedMs = 0; this.actionState.clear(); }
+  public java.util.Set<String> names() { return named.keySet(); }
+  public Entity2D find(String name) { return named.get(name); }
 
   @Override
   public void update(long deltaMs) {

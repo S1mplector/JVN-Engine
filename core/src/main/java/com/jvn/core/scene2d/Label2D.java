@@ -16,6 +16,10 @@ public class Label2D extends Entity2D {
   public void setColor(double r, double g, double b, double a) { this.r = r; this.g = g; this.blue = b; this.a = a; }
   public void setFont(String family, double size, boolean bold) { this.fontFamily = family; this.size = size; this.bold = bold; }
   public void setAlign(Align a) { this.align = a == null ? Align.LEFT : a; }
+  public double getSize() { return size; }
+  public boolean isBold() { return bold; }
+  public String getFontFamily() { return fontFamily; }
+  public Align getAlign() { return align; }
 
   @Override
   public void render(Blitter2D b) {

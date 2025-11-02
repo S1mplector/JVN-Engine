@@ -21,6 +21,8 @@ public class Scene2DBase implements Scene2D {
   public void remove(Entity2D e) { children.remove(e); }
   public void clear() { children.clear(); }
 
+  public java.util.List<Entity2D> getChildren() { return children; }
+
   @Override public void onEnter() {}
   @Override public void onExit() {}
 

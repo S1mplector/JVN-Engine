@@ -10,8 +10,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.FileChooser;
 import javafx.animation.AnimationTimer;
@@ -22,6 +24,12 @@ import java.io.File;
 import com.jvn.scripting.jes.JesLoader;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.fx.scene2d.FxBlitter2D;
+import com.jvn.core.scene2d.Scene2DBase;
+import com.jvn.core.scene2d.Entity2D;
+import com.jvn.core.scene2d.Panel2D;
+import com.jvn.core.scene2d.Label2D;
+import com.jvn.core.physics.RigidBody2D;
+import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
 
 public class EditorApp extends Application {
   private Canvas canvas;
@@ -30,6 +38,8 @@ public class EditorApp extends Application {
   private AnimationTimer timer;
   private Label status;
   private File lastOpened;
+  private Entity2D selected;
+  private VBox inspector;
 
   public static void main(String[] args) {
     launch(args);
@@ -61,6 +71,10 @@ public class EditorApp extends Application {
     canvas = new Canvas(1200, 740);
     GraphicsContext gc = canvas.getGraphicsContext2D();
     blitter = new FxBlitter2D(gc);
+    canvas.setOnMouseClicked(e -> {
+      pick(e.getX(), e.getY());
+      buildInspector();
+    });
 
     // Layout
     BorderPane top = new BorderPane();
@@ -68,6 +82,10 @@ public class EditorApp extends Application {
     top.setCenter(toolbar);
     root.setTop(top);
     root.setCenter(canvas);
+    inspector = new VBox(8);
+    inspector.setMinWidth(280);
+    inspector.setPrefWidth(320);
+    root.setRight(inspector);
 
     Scene scene = new Scene(root, 1200, 800);
     primaryStage.setScene(scene);
@@ -102,6 +120,8 @@ public class EditorApp extends Application {
       }
       lastOpened = f;
       status.setText("Loaded: " + f.getName());
+      selected = null;
+      buildInspector();
     } catch (Exception ex) {
       status.setText("Load failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
@@ -114,6 +134,8 @@ public class EditorApp extends Application {
     try (InputStream in = new FileInputStream(lastOpened)) {
       current = JesLoader.load(in);
       status.setText("Reloaded: " + lastOpened.getName());
+      selected = null;
+      buildInspector();
     } catch (Exception ex) {
       status.setText("Reload failed");
     }
@@ -129,9 +151,89 @@ public class EditorApp extends Application {
     if (current != null) {
       current.update(deltaMs);
       current.render(blitter, w, h);
+      drawSelectionOverlay();
     } else {
       gc.setFill(javafx.scene.paint.Color.WHITE);
       gc.fillText("Open a JES file to preview", 20, 30);
     }
+  }
+
+  private void drawSelectionOverlay() {
+    if (selected == null) return;
+    blitter.push();
+    blitter.setStroke(0.2, 0.8, 1, 1);
+    blitter.setStrokeWidth(1.0);
+    if (selected instanceof Panel2D p) {
+      blitter.strokeRect(selected.getX(), selected.getY(), p.getWidth(), p.getHeight());
+    } else if (selected instanceof PhysicsBodyEntity2D pb) {
+      RigidBody2D b = pb.getBody();
+      if (b != null) {
+        if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
+          blitter.strokeCircle(b.getCircle().x, b.getCircle().y, b.getCircle().r);
+        } else {
+          var aabb = b.getAabb();
+          blitter.strokeRect(aabb.x, aabb.y, aabb.w, aabb.h);
+        }
+      }
+    }
+    blitter.pop();
+  }
+
+  private void pick(double x, double y) {
+    if (current == null) return;
+    selected = null;
+    java.util.List<Entity2D> list = ((Scene2DBase)current).getChildren();
+    for (int i = list.size() - 1; i >= 0; i--) {
+      Entity2D e = list.get(i);
+      if (!e.isVisible()) continue;
+      if (e instanceof Panel2D p) {
+        if (x >= e.getX() && y >= e.getY() && x <= e.getX() + p.getWidth() && y <= e.getY() + p.getHeight()) { selected = e; break; }
+      } else if (e instanceof PhysicsBodyEntity2D pb) {
+        RigidBody2D b = pb.getBody(); if (b == null) continue;
+        if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
+          double dx = x - b.getCircle().x, dy = y - b.getCircle().y; double rr = b.getCircle().r; if (dx*dx + dy*dy <= rr*rr) { selected = e; break; }
+        } else {
+          var a = b.getAabb(); if (x >= a.x && y >= a.y && x <= a.x + a.w && y <= a.y + a.h) { selected = e; break; }
+        }
+      }
+    }
+  }
+
+  private void buildInspector() {
+    inspector.getChildren().clear();
+    if (selected == null) { inspector.getChildren().add(new Label("No selection")); return; }
+    inspector.getChildren().add(new Label("Selected: " + selected.getClass().getSimpleName()));
+
+    // Common position controls
+    var posX = makeNumberField("x", selected.getX(), v -> { selected.setPosition(v, selected.getY()); });
+    var posY = makeNumberField("y", selected.getY(), v -> { selected.setPosition(selected.getX(), v); });
+    inspector.getChildren().addAll(posX, posY);
+
+    if (selected instanceof Panel2D p) {
+      var w = makeNumberField("width", p.getWidth(), v -> { p.setSize(v, p.getHeight()); });
+      var h = makeNumberField("height", p.getHeight(), v -> { p.setSize(p.getWidth(), v); });
+      inspector.getChildren().addAll(w, h);
+    } else if (selected instanceof PhysicsBodyEntity2D pb) {
+      RigidBody2D body = pb.getBody(); if (body != null) {
+        var mass = makeNumberField("mass", body.getMass(), v -> body.setMass(v));
+        var rest = makeNumberField("restitution", body.getRestitution(), v -> body.setRestitution(v));
+        inspector.getChildren().addAll(mass, rest);
+      }
+    }
+  }
+
+  private HBox makeNumberField(String label, double initial, java.util.function.DoubleConsumer onChange) {
+    HBox row = new HBox(6);
+    Label l = new Label(label);
+    TextField tf = new TextField(Double.toString(initial));
+    tf.setOnAction(e -> applyDouble(tf, onChange));
+    tf.setOnKeyReleased(e -> { if (e.getCode().isLetterKey() || e.getCode().isDigitKey() || e.getCode().toString().equals("ENTER")) applyDouble(tf, onChange); });
+    row.getChildren().addAll(l, tf);
+    return row;
+  }
+
+  private void applyDouble(TextField tf, java.util.function.DoubleConsumer onChange) {
+    try { double v = Double.parseDouble(tf.getText()); onChange.accept(v); status.setText("Updated " + tf.getText()); }
+    catch (Exception ex) { /* ignore parse errors */ }
   }
 }

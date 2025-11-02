@@ -10,6 +10,7 @@ public class PhysicsBodyEntity2D extends Entity2D {
   private double sr = 0, sg = 0, sb = 0, sa = 1.0, sw = 0.01;
 
   public PhysicsBodyEntity2D(RigidBody2D body) { this.body = body; }
+  public RigidBody2D getBody() { return body; }
 
   public void setColor(double r, double g, double b, double a) { this.r = r; this.g = g; this.b = b; this.a = a; }
   public void setStroke(double r, double g, double b, double a, double w) { this.sr = r; this.sg = g; this.sb = b; this.sa = a; this.sw = Math.max(0, w); }
