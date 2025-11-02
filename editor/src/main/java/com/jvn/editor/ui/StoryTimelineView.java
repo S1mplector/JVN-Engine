@@ -4,7 +4,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Slider;
@@ -149,9 +149,12 @@ public class StoryTimelineView extends BorderPane {
     Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
     Slider zoom = new Slider(0.6, 2.0, 1.0); zoom.setPrefWidth(120);
     zoom.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
-    HBox bar = new HBox(6, bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoom, tfSearch, bAuto, bSave, bLoad, bValidate);
-    bar.setPadding(new Insets(6));
-    setTop(bar);
+    FlowPane actions = new FlowPane(6, 6);
+    actions.setPadding(new Insets(6));
+    actions.getChildren().addAll(bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoom, tfSearch, bAuto, bSave, bLoad, bValidate);
+    // Wrap to new rows instead of squeezing buttons to tiny squares
+    actions.prefWrapLengthProperty().bind(widthProperty().subtract(24));
+    setTop(actions);
 
     // Graph actions wiring
     graph.setOnRunArc(a -> { if (onRunArc != null) onRunArc.accept(a); });
@@ -291,6 +294,6 @@ public class StoryTimelineView extends BorderPane {
   }
 
   private void refreshGraph() {
-    graph.setModel(getArcs(), getLinks());
+    graph.setModel(arcs.getItems(), links.getItems());
   }
 }

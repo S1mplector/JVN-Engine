@@ -89,6 +89,22 @@ public class EditorApp extends Application {
       String task = mf.getProperty("task", "run").trim();
       String args = mf.getProperty("args", "-x test");
       runGradle(root, composeGradleTask(path, task), args == null ? new String[]{} : args.split("\\s+"), "Run Project");
+    } else if ("vn".equalsIgnoreCase(type)) {
+      // Open entry VNS and start preview from its label
+      String entryVns = mf.getProperty("entryVns", "scripts/prologue.vns");
+      String entryLabel = mf.getProperty("entryLabel", "start");
+      File f = new File(root, entryVns);
+      if (f.exists()) {
+        openVnsFile(f);
+        this.projectRoot = root;
+        if (projView != null) projView.setRootDirectory(root);
+        if (timelineView != null) timelineView.setProjectRoot(root);
+        if (settingsEditor != null) settingsEditor.setProjectRoot(root);
+        javafx.application.Platform.runLater(() -> { FileEditorTab ft = getActiveFileTab(); if (ft != null) ft.runFromLabel(entryLabel); });
+        status.setText("Opened VN project: " + root.getName());
+      } else {
+        status.setText("Entry VNS not found: " + entryVns);
+      }
     } else if ("jes".equalsIgnoreCase(type)) {
       // For JES-only projects: open the entry script and set as project
       String entry = mf.getProperty("entry", "scripts/main.jes");
@@ -175,14 +191,48 @@ public class EditorApp extends Application {
     javafx.scene.control.TextInputDialog nameDlg = new javafx.scene.control.TextInputDialog("MyProject");
     nameDlg.setHeaderText(null); nameDlg.setTitle("New Project"); nameDlg.setContentText("Project name:");
     var nameRes = nameDlg.showAndWait(); if (nameRes.isEmpty()) return; String name = nameRes.get().trim(); if (name.isEmpty()) return;
-    javafx.scene.control.ChoiceDialog<String> typeDlg = new javafx.scene.control.ChoiceDialog<>("jes", java.util.List.of("jes","gradle"));
+    javafx.scene.control.ChoiceDialog<String> typeDlg = new javafx.scene.control.ChoiceDialog<>("vn", java.util.List.of("vn","jes","gradle"));
     typeDlg.setHeaderText(null); typeDlg.setTitle("Project Type"); typeDlg.setContentText("Type:");
     var typeRes = typeDlg.showAndWait(); if (typeRes.isEmpty()) return; String type = typeRes.get();
     File dir = new File(base, name); dir.mkdirs();
     try {
       Properties p = new Properties();
       p.setProperty("name", name);
-      if ("jes".equalsIgnoreCase(type)) {
+      if ("vn".equalsIgnoreCase(type)) {
+        p.setProperty("type", "vn");
+        p.setProperty("entryVns", "scripts/prologue.vns");
+        p.setProperty("entryLabel", "start");
+        p.setProperty("timeline", "story.timeline");
+        // directories
+        new File(dir, "scripts").mkdirs();
+        new File(dir, "assets/characters").mkdirs();
+        new File(dir, "assets/backgrounds").mkdirs();
+        new File(dir, "assets/cg").mkdirs();
+        new File(dir, "assets/ui").mkdirs();
+        new File(dir, "assets/bgm").mkdirs();
+        new File(dir, "assets/sfx").mkdirs();
+        new File(dir, "assets/voices").mkdirs();
+        // sample script
+        try (FileWriter fw = new FileWriter(new File(dir, "scripts/prologue.vns"))) {
+          fw.write("label start\n\n\"Welcome to " + name + "!\"\n\n[choice Begin->start]\n");
+        }
+        // sample timeline
+        try (FileWriter fw = new FileWriter(new File(dir, "story.timeline"))) {
+          fw.write("ARC|Prologue|scripts/prologue.vns|start|40|40\n");
+        }
+        // default settings
+        try (FileOutputStream fos = new FileOutputStream(new File(dir, "vn.settings"))) {
+          Properties sp = new Properties();
+          sp.setProperty("textSpeed", "40");
+          sp.setProperty("bgm", "0.7");
+          sp.setProperty("sfx", "0.7");
+          sp.setProperty("voice", "0.7");
+          sp.setProperty("autoPlayDelay", "1500");
+          sp.setProperty("skipUnread", "false");
+          sp.setProperty("skipAfterChoices", "false");
+          sp.store(fos, "VN Settings");
+        }
+      } else if ("jes".equalsIgnoreCase(type)) {
         p.setProperty("type", "jes");
         p.setProperty("entry", "scripts/main.jes");
         new File(dir, "scripts").mkdirs();
