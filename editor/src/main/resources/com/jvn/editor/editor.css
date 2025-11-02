@@ -1,6 +1,8 @@
 .code-area {
   -fx-background-color: #0e0f13;
-  -fx-text-fill: #c9d1d9;
+}
+.code-area .text {
+  -fx-fill: #c9d1d9;
 }
 
 .keyword {
