@@ -252,9 +252,7 @@ public class VnScriptParser {
   
   private void flushChoices(VnScenarioBuilder builder, List<Choice> choices) {
     if (!choices.isEmpty()) {
-      builder.choiceWithTargets(choices.stream()
-        .map(c -> new String[]{c.getText(), c.getTargetLabel()})
-        .toArray(String[][]::new));
+      builder.choiceNodes(new java.util.ArrayList<>(choices));
       choices.clear();
     }
   }

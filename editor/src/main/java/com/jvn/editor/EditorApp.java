@@ -11,6 +11,7 @@ import com.jvn.editor.commands.CommandStack;
 import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.FileEditorTab;
 import com.jvn.editor.ui.ProjectExplorerView;
+import com.jvn.editor.ui.StoryTimelineView;
 import com.jvn.editor.ui.SceneGraphView;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import javafx.animation.AnimationTimer;
@@ -50,6 +51,7 @@ public class EditorApp extends Application {
   
   private SceneGraphView sgView;
   private ProjectExplorerView projView;
+  private StoryTimelineView timelineView;
   private final CommandStack commands = new CommandStack();
   private Tab tabProject;
   private Tab tabScene;
@@ -107,6 +109,7 @@ public class EditorApp extends Application {
       if (root == null) return null;
       this.projectRoot = root;
       if (projView != null) projView.setRootDirectory(root);
+      if (timelineView != null) timelineView.setProjectRoot(root);
     }
     return root;
   }
@@ -194,6 +197,7 @@ public class EditorApp extends Application {
       }
       try (FileOutputStream fos = new FileOutputStream(new File(dir, "jvn.project"))) { p.store(fos, "JVN Project Manifest"); }
       this.projectRoot = dir; if (projView != null) projView.setRootDirectory(dir);
+      if (timelineView != null) timelineView.setProjectRoot(dir);
       status.setText("Created project: " + name);
     } catch (Exception ex) {
       status.setText("Create project failed");
@@ -324,7 +328,13 @@ public class EditorApp extends Application {
     inspectorView.setPrefWidth(320);
     ScrollPane inspectorScroll = new ScrollPane(inspectorView);
     inspectorScroll.setFitToWidth(true);
-    root.setRight(inspectorScroll);
+    timelineView = new StoryTimelineView();
+    TabPane rightTabs = new TabPane();
+    Tab tabInspectorRight = new Tab("Inspector", inspectorScroll); tabInspectorRight.setClosable(false);
+    Tab tabTimeline = new Tab("Timeline", timelineView); tabTimeline.setClosable(false);
+    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline);
+    rightTabs.setPrefWidth(360);
+    root.setRight(rightTabs);
     sgView = new SceneGraphView();
     sgView.setMinWidth(200);
     sgView.setPrefWidth(240);
@@ -393,6 +403,7 @@ public class EditorApp extends Application {
     if (dir == null) return;
     this.projectRoot = dir;
     if (projView != null) projView.setRootDirectory(dir);
+    if (timelineView != null) timelineView.setProjectRoot(dir);
     status.setText("Project: " + dir.getName());
   }
 

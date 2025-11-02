@@ -61,7 +61,17 @@ public class VnsCodeEditor extends BorderPane {
     bHud.setOnAction(e -> insertSnippet("[call hud Hello]" + System.lineSeparator()));
     Button bJava = new Button("Java");
     bJava.setOnAction(e -> insertSnippet("[java com.example.Class#method arg1 arg2]" + System.lineSeparator()));
-    ToolBar bar = new ToolBar(bDialogue, bChoice, bBackground, bJump, bSet, bIf, bHud, bJava);
+    Button bSettings = new Button("Settings");
+    bSettings.setOnAction(e -> insertSnippet("[settings]" + System.lineSeparator()));
+    Button bMainMenu = new Button("MainMenu");
+    bMainMenu.setOnAction(e -> insertSnippet("[mainmenu demo.vns]" + System.lineSeparator()));
+    Button bLoad = new Button("Load");
+    bLoad.setOnAction(e -> insertSnippet("[load arc2.vns label start]" + System.lineSeparator()));
+    Button bGotoArc = new Button("GotoArc");
+    bGotoArc.setOnAction(e -> insertSnippet("[goto arcName:labelName]" + System.lineSeparator()));
+    Button bJesCall = new Button("JES Call");
+    bJesCall.setOnAction(e -> insertSnippet("[jes call flash color=#ff0 dur=300]" + System.lineSeparator()));
+    ToolBar bar = new ToolBar(bDialogue, bChoice, bBackground, bJump, bSet, bIf, bHud, bJava, bSettings, bMainMenu, bLoad, bGotoArc, bJesCall);
     setTop(bar);
 
     var css = VnsCodeEditor.class.getResource("/com/jvn/editor/editor.css");

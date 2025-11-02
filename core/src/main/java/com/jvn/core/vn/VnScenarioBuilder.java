@@ -115,6 +115,16 @@ public class VnScenarioBuilder {
     return this;
   }
 
+  public VnScenarioBuilder choiceNodes(List<Choice> choiceList) {
+    if (choiceList == null) choiceList = new ArrayList<>();
+    scenarioBuilder.addNode(
+      VnNode.builder(VnNodeType.CHOICE)
+        .choices(choiceList)
+        .build()
+    );
+    return this;
+  }
+
   public VnScenarioBuilder jump(String labelName) {
     scenarioBuilder.addNode(
       VnNode.builder(VnNodeType.JUMP)

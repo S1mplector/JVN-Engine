@@ -158,6 +158,9 @@ public class LoadMenuScene implements Scene {
       VnScenario scenario = loadScenario(script != null ? script : defaultScriptName);
       VnScene scene = new VnScene(scenario);
       if (audio != null) scene.setAudioFacade(audio);
+      if (engine != null && engine.getVnInteropFactory() != null) {
+        scene.setInterop(engine.getVnInteropFactory().create(engine));
+      }
       saveManager.applyToState(data, scene.getState());
       if (audio != null) {
         var s = scene.getState().getSettings();
