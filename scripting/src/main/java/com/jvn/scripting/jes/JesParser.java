@@ -36,30 +36,37 @@ public class JesParser {
   private JesAst.SceneDecl parseScene() {
     JesAst.SceneDecl s = new JesAst.SceneDecl();
     s.name = expect(STRING, "scene name").lexeme;
-    expect(LBRACE, "'{'");
+    expect(LBRACE, "'{'" );
     while (!match(RBRACE)) {
-      if (match(IDENT) && "entity".equals(prev().lexeme)) {
-        s.entities.add(parseEntity());
-      } else if (match(IDENT) && "on".equals(prev().lexeme)) {
-        s.bindings.add(parseBinding());
-      } else if (match(IDENT) && "timeline".equals(prev().lexeme)) {
-        expect(LBRACE, "'{'");
-        while (!match(RBRACE)) {
-          if (match(IDENT)) {
-            String kind = prev().lexeme;
-            s.timeline.add(parseTimelineAction(kind));
-          } else {
-            i++;
+      if (peek().type == IDENT) {
+        String word = peek().lexeme;
+        if ("entity".equals(word)) {
+          match(IDENT); // consume 'entity'
+          s.entities.add(parseEntity());
+        } else if ("on".equals(word)) {
+          match(IDENT); // consume 'on'
+          s.bindings.add(parseBinding());
+        } else if ("timeline".equals(word)) {
+          match(IDENT); // consume 'timeline'
+          expect(LBRACE, "'{'" );
+          while (!match(RBRACE)) {
+            if (peek().type == IDENT) {
+              String kind = peek().lexeme;
+              match(IDENT);
+              s.timeline.add(parseTimelineAction(kind));
+            } else {
+              i++;
+            }
           }
+        } else {
+          // scene-level prop: key : value
+          String key = expect(IDENT, "identifier").lexeme;
+          expect(COLON, ":");
+          Object val = parseValue();
+          s.props.put(key, val);
         }
-      } else if (prev().type == IDENT) {
-        // scene-level prop: key : value
-        String key = prev().lexeme;
-        expect(COLON, ":");
-        Object val = parseValue();
-        s.props.put(key, val);
       } else {
-        i++; // skip
+        i++; // skip unknown token
       }
     }
     return s;
