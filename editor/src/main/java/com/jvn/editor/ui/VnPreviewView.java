@@ -65,6 +65,14 @@ public class VnPreviewView extends StackPane {
     this.scene.onEnter();
   }
 
+  public void runScenario(VnScenario scenario, String label) {
+    setScenario(scenario);
+    if (this.scene != null && label != null && !label.isBlank()) {
+      this.scene.getState().jumpToLabel(label);
+      this.scene.onEnter();
+    }
+  }
+
   public void setSize(double w, double h) {
     canvas.setWidth(Math.max(1, w));
     canvas.setHeight(Math.max(1, h));

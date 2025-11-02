@@ -56,7 +56,7 @@ public class FileEditorTab extends BorderPane {
       viewport.setOnSelected(e -> { if (onSelected != null) onSelected.accept(e); });
       viewport.setOnStatus(s -> { if (onStatus != null) onStatus.accept(s); });
     }
-
+    
     setupLayout();
 
     if (file != null && file.exists()) reloadFromDisk();
@@ -68,6 +68,18 @@ public class FileEditorTab extends BorderPane {
     addEventFilter(KeyEvent.KEY_RELEASED, e -> {
       if (viewport != null) viewport.getInput().keyUp(mapKey(e.getCode()));
     });
+  }
+
+  public void runFromLabel(String label) {
+    try {
+      if (kind != Kind.VNS || vnsEditor == null || vnPreview == null) return;
+      String code = vnsEditor.getText();
+      if (code == null || code.isBlank()) return;
+      VnScriptParser parser = new VnScriptParser();
+      VnScenario scenario = parser.parseFromString(code);
+      vnPreview.runScenario(scenario, label);
+      if (onStatus != null) onStatus.accept("Run from label: " + (label == null ? "<start>" : label));
+    } catch (Exception ignored) {}
   }
 
   private void setupLayout() {

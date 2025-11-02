@@ -10,6 +10,7 @@ import javafx.stage.FileChooser;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class StoryTimelineView extends BorderPane {
   public static class Arc {
@@ -17,6 +18,52 @@ public class StoryTimelineView extends BorderPane {
     public String script;
     public String entryLabel;
     public String toLine() { return "ARC|" + nn(name) + "|" + nn(script) + "|" + nn(entryLabel); }
+  }
+
+  private void validate() {
+    StringBuilder sb = new StringBuilder();
+    // Check arcs
+    for (Arc a : arcs.getItems()) {
+      if (a == null) continue;
+      File f = resolveFile(a.script);
+      if (f == null || !f.exists()) {
+        sb.append("Missing script for arc '").append(a.name).append("': ").append(a.script).append("\n");
+        continue;
+      }
+      if (a.entryLabel != null && !a.entryLabel.isBlank()) {
+        boolean ok = hasLabel(f, a.entryLabel);
+        if (!ok) sb.append("Arc '").append(a.name).append("' missing entry label '").append(a.entryLabel).append("'\n");
+      }
+    }
+    // Check links
+    for (Link l : links.getItems()) {
+      if (l == null) continue;
+      Arc ta = findArc(l.toArc);
+      if (ta == null) { sb.append("Link to unknown arc: ").append(l.toArc).append("\n"); continue; }
+      File f = resolveFile(ta.script);
+      if (f == null || !f.exists()) { sb.append("Link target arc script missing: ").append(ta.script).append("\n"); continue; }
+      String lab = (l.toLabel != null && !l.toLabel.isBlank()) ? l.toLabel : ta.entryLabel;
+      if (lab != null && !lab.isBlank()) {
+        boolean ok = hasLabel(f, lab);
+        if (!ok) sb.append("Link target label missing: ").append(l.toArc).append(":").append(lab).append("\n");
+      }
+    }
+    if (sb.length() == 0) {
+      Alert a = new Alert(Alert.AlertType.INFORMATION, "Timeline OK"); a.setHeaderText(null); a.setTitle("Validate"); a.showAndWait();
+    } else {
+      TextArea ta = new TextArea(sb.toString()); ta.setEditable(false); ta.setWrapText(true);
+      Dialog<Void> dlg = new Dialog<>(); dlg.setTitle("Validation Issues"); dlg.getDialogPane().setContent(ta); dlg.getDialogPane().getButtonTypes().add(ButtonType.OK); dlg.showAndWait();
+    }
+  }
+
+  private boolean hasLabel(File vnsFile, String label) {
+    try (FileInputStream in = new FileInputStream(vnsFile)) {
+      com.jvn.core.vn.script.VnScriptParser p = new com.jvn.core.vn.script.VnScriptParser();
+      com.jvn.core.vn.VnScenario sc = p.parse(in);
+      return sc.getLabelIndex(label) != null;
+    } catch (Exception e) {
+      return false;
+    }
   }
   public static class Link {
     public String fromArc;
@@ -29,6 +76,8 @@ public class StoryTimelineView extends BorderPane {
   private final ListView<Arc> arcs = new ListView<>();
   private final ListView<Link> links = new ListView<>();
   private File projectRoot;
+  private Consumer<Arc> onRunArc;
+  private Consumer<Link> onRunLink;
 
   public StoryTimelineView() {
     arcs.setCellFactory(v -> new ListCell<>() {
@@ -60,13 +109,19 @@ public class StoryTimelineView extends BorderPane {
     bRemoveLink.setOnAction(e -> { Link l = links.getSelectionModel().getSelectedItem(); if (l != null) links.getItems().remove(l); });
     Button bOpenArc = new Button("Open Arc");
     bOpenArc.setOnAction(e -> openArc());
+    Button bRunArc = new Button("Run Arc");
+    bRunArc.setOnAction(e -> { Arc a = arcs.getSelectionModel().getSelectedItem(); if (a != null && onRunArc != null) onRunArc.accept(a); });
+    Button bRunLink = new Button("Run Link");
+    bRunLink.setOnAction(e -> { Link l = links.getSelectionModel().getSelectedItem(); if (l != null && onRunLink != null) onRunLink.accept(l); });
     Button bCopyGoto = new Button("Copy Goto");
     bCopyGoto.setOnAction(e -> copyGoto());
     Button bSave = new Button("Save");
     bSave.setOnAction(e -> save());
     Button bLoad = new Button("Load");
     bLoad.setOnAction(e -> load());
-    HBox bar = new HBox(6, bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bCopyGoto, bSave, bLoad);
+    Button bValidate = new Button("Validate");
+    bValidate.setOnAction(e -> validate());
+    HBox bar = new HBox(6, bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, bSave, bLoad, bValidate);
     bar.setPadding(new Insets(6));
     setTop(bar);
   }
@@ -74,6 +129,13 @@ public class StoryTimelineView extends BorderPane {
   public void setProjectRoot(File dir) {
     this.projectRoot = dir;
     load();
+  }
+
+  public void setOnRunArc(Consumer<Arc> c) { this.onRunArc = c; }
+  public void setOnRunLink(Consumer<Link> c) { this.onRunLink = c; }
+  public List<Arc> getArcs() { return new ArrayList<>(arcs.getItems()); }
+  public Arc findArc(String name) {
+    for (Arc a : arcs.getItems()) if (a != null && name != null && name.equals(a.name)) return a; return null;
   }
 
   private void addArc() {
@@ -88,7 +150,7 @@ public class StoryTimelineView extends BorderPane {
     TextInputDialog ldlg = new TextInputDialog("");
     ldlg.setHeaderText(null); ldlg.setTitle("Entry Label"); ldlg.setContentText("Label (optional):");
     var lres = ldlg.showAndWait(); String label = lres.isEmpty() ? "" : lres.get().trim();
-    Arc a = new Arc(); a.name = name; a.script = f.getAbsolutePath(); a.entryLabel = label;
+    Arc a = new Arc(); a.name = name; a.script = toRelative(f); a.entryLabel = label;
     arcs.getItems().add(a);
   }
 
@@ -113,7 +175,7 @@ public class StoryTimelineView extends BorderPane {
 
   private void openArc() {
     Arc a = arcs.getSelectionModel().getSelectedItem(); if (a == null) return;
-    try { java.awt.Desktop.getDesktop().open(new File(a.script)); } catch (Exception ignored) {}
+    try { java.awt.Desktop.getDesktop().open(resolveFile(a.script)); } catch (Exception ignored) {}
   }
 
   private void copyGoto() {
@@ -157,4 +219,27 @@ public class StoryTimelineView extends BorderPane {
 
   private static String nn(String s) { return s == null ? "" : s; }
   private static String n(String s) { return s == null ? "" : s; }
+
+  private String toRelative(File f) {
+    try {
+      if (projectRoot == null) return f.getAbsolutePath();
+      String root = projectRoot.getCanonicalPath();
+      String abs = f.getCanonicalPath();
+      if (abs.startsWith(root)) {
+        String rel = abs.substring(root.length());
+        if (rel.startsWith(File.separator)) rel = rel.substring(1);
+        return rel.replace('\\', '/');
+      }
+      return abs;
+    } catch (Exception e) {
+      return f.getPath();
+    }
+  }
+
+  private File resolveFile(String p) {
+    if (p == null) return null;
+    File f = new File(p);
+    if (f.isAbsolute() || projectRoot == null) return f;
+    return new File(projectRoot, p);
+  }
 }

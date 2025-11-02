@@ -12,6 +12,7 @@ import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.FileEditorTab;
 import com.jvn.editor.ui.ProjectExplorerView;
 import com.jvn.editor.ui.StoryTimelineView;
+import com.jvn.editor.ui.SettingsEditorView;
 import com.jvn.editor.ui.SceneGraphView;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import javafx.animation.AnimationTimer;
@@ -52,6 +53,7 @@ public class EditorApp extends Application {
   private SceneGraphView sgView;
   private ProjectExplorerView projView;
   private StoryTimelineView timelineView;
+  private SettingsEditorView settingsEditor;
   private final CommandStack commands = new CommandStack();
   private Tab tabProject;
   private Tab tabScene;
@@ -110,6 +112,7 @@ public class EditorApp extends Application {
       this.projectRoot = root;
       if (projView != null) projView.setRootDirectory(root);
       if (timelineView != null) timelineView.setProjectRoot(root);
+      if (settingsEditor != null) settingsEditor.setProjectRoot(root);
     }
     return root;
   }
@@ -198,6 +201,7 @@ public class EditorApp extends Application {
       try (FileOutputStream fos = new FileOutputStream(new File(dir, "jvn.project"))) { p.store(fos, "JVN Project Manifest"); }
       this.projectRoot = dir; if (projView != null) projView.setRootDirectory(dir);
       if (timelineView != null) timelineView.setProjectRoot(dir);
+      if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
       status.setText("Created project: " + name);
     } catch (Exception ex) {
       status.setText("Create project failed");
@@ -329,12 +333,39 @@ public class EditorApp extends Application {
     ScrollPane inspectorScroll = new ScrollPane(inspectorView);
     inspectorScroll.setFitToWidth(true);
     timelineView = new StoryTimelineView();
+    settingsEditor = new SettingsEditorView();
     TabPane rightTabs = new TabPane();
     Tab tabInspectorRight = new Tab("Inspector", inspectorScroll); tabInspectorRight.setClosable(false);
     Tab tabTimeline = new Tab("Timeline", timelineView); tabTimeline.setClosable(false);
-    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline);
+    Tab tabSettings = new Tab("Settings", settingsEditor); tabSettings.setClosable(false);
+    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline, tabSettings);
     rightTabs.setPrefWidth(360);
     root.setRight(rightTabs);
+    timelineView.setOnRunArc(a -> {
+      if (a == null || a.script == null) return;
+      File f = resolveProjectFile(a.script);
+      if (f != null && f.exists()) {
+        openFile(f);
+        FileEditorTab ft = getActiveFileTab();
+        if (ft != null) ft.runFromLabel((a.entryLabel == null || a.entryLabel.isBlank()) ? null : a.entryLabel);
+      } else {
+        status.setText("Arc script not found: " + a.script);
+      }
+    });
+    timelineView.setOnRunLink(l -> {
+      if (l == null) return;
+      StoryTimelineView.Arc ta = timelineView.findArc(l.toArc);
+      if (ta == null) { status.setText("Arc not found: " + l.toArc); return; }
+      File f = resolveProjectFile(ta.script);
+      if (f != null && f.exists()) {
+        openFile(f);
+        FileEditorTab ft = getActiveFileTab();
+        String label = (l.toLabel != null && !l.toLabel.isBlank()) ? l.toLabel : ta.entryLabel;
+        if (ft != null) ft.runFromLabel((label == null || label.isBlank()) ? null : label);
+      } else {
+        status.setText("Arc script not found: " + ta.script);
+      }
+    });
     sgView = new SceneGraphView();
     sgView.setMinWidth(200);
     sgView.setPrefWidth(240);
@@ -404,12 +435,20 @@ public class EditorApp extends Application {
     this.projectRoot = dir;
     if (projView != null) projView.setRootDirectory(dir);
     if (timelineView != null) timelineView.setProjectRoot(dir);
+    if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
     status.setText("Project: " + dir.getName());
   }
 
   private void openJesFile(File f) { openFile(f); }
 
   private void openVnsFile(File f) { openFile(f); }
+
+  private File resolveProjectFile(String p) {
+    if (p == null) return null;
+    File f = new File(p);
+    if (f.isAbsolute() || projectRoot == null) return f;
+    return new File(projectRoot, p);
+  }
 
   private void doReload() {
     FileEditorTab ft = getActiveFileTab();
