@@ -62,12 +62,19 @@ public class RuntimeVnInterop implements VnInterop {
         case "call": {
           String name = toks.length >= 2 ? toks[1] : null;
           if (name != null) {
+            java.util.Map<String,Object> props = new java.util.HashMap<>();
+            for (int i = 2; i < toks.length; i++) {
+              String t = toks[i];
+              int eq = t.indexOf('=');
+              if (eq > 0) {
+                String k = t.substring(0, eq);
+                String v = t.substring(eq + 1);
+                props.put(k, parseScalar(v));
+              }
+            }
             Scene top = engine.scenes().peek();
             if (top instanceof JesScene2D jes) {
-              // no generic arg map in payload yet; extend later
-              jes.registerCall(name, m -> {}); // ensure name exists, then invoke
-              java.util.function.Consumer<java.util.Map<String,Object>> h = null; // not used now
-              // direct timeline call action is handled inside Jes scene via timeline; here we just signal
+              jes.invokeCall(name, props);
             }
           }
           return VnInteropResult.advance();
@@ -112,6 +119,26 @@ public class RuntimeVnInterop implements VnInterop {
     List<String> toks = new ArrayList<>(java.util.Arrays.asList(split(payload)));
     if (toks.isEmpty()) return VnInteropResult.advance();
     String cmd = toks.remove(0).toLowerCase();
+    if ("goto".equals(cmd)) {
+      if (toks.isEmpty()) return VnInteropResult.advance();
+      String target = toks.remove(0);
+      int colon = target.indexOf(':');
+      if (colon < 0) {
+        scene.getState().jumpToLabel(target);
+        return VnInteropResult.stay();
+      }
+      String arc = target.substring(0, colon);
+      String label = target.substring(colon + 1);
+      String script = arc.contains(".") ? arc : arc + ".vns";
+      try {
+        VnScene newScene = loadVnScene(script, scene);
+        if (newScene != null) {
+          if (label != null && !label.isBlank()) newScene.getState().jumpToLabel(label);
+          engine.scenes().replace(newScene);
+        }
+      } catch (Exception ignored) {}
+      return VnInteropResult.advance();
+    }
     String script = toks.isEmpty() ? null : toks.remove(0);
     String label = null;
     if (!toks.isEmpty() && "label".equalsIgnoreCase(toks.get(0))) {
@@ -162,4 +189,13 @@ public class RuntimeVnInterop implements VnInterop {
 
   private static String safe(String s) { return s == null ? "" : s; }
   private static String[] split(String s) { return (s == null ? "" : s.trim()).isEmpty() ? new String[0] : s.trim().split("\\s+"); }
+  private static Object parseScalar(String s) {
+    if (s == null) return "";
+    String t = s.trim();
+    if (t.equalsIgnoreCase("true")) return Boolean.TRUE;
+    if (t.equalsIgnoreCase("false")) return Boolean.FALSE;
+    try { if (t.contains(".")) return Double.parseDouble(t); else return Integer.parseInt(t); }
+    catch (Exception ignored) {}
+    return t;
+  }
 }
