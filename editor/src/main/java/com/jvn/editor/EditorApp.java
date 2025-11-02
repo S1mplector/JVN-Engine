@@ -202,6 +202,10 @@ public class EditorApp extends Application {
       if (lastOpened != null) fc.setInitialFileName(lastOpened.getName());
       File f = fc.showSaveDialog(stage);
       if (f == null) return;
+      String fname = f.getName();
+      if (!(fname.endsWith(".jes") || fname.endsWith(".txt"))) {
+        f = new File(f.getAbsolutePath() + ".jes");
+      }
       String sceneName = stripExt(f.getName());
       String content = JesExporter.export(current, sceneName);
       try (FileWriter fw = new FileWriter(f)) { fw.write(content); }

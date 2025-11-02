@@ -17,6 +17,10 @@ public class Panel2D extends Entity2D {
   public double getWidth() { return width; }
   public double getHeight() { return height; }
   public void setFill(double r, double g, double b, double a) { this.r = r; this.g = g; this.blue = b; this.a = a; }
+  public double getFillR() { return r; }
+  public double getFillG() { return g; }
+  public double getFillB() { return blue; }
+  public double getFillA() { return a; }
   public void setStroke(double r, double g, double b, double a, double width) {
     this.strokeR = r; this.strokeG = g; this.strokeB = b; this.strokeA = a; this.strokeWidth = Math.max(0, width);
   }

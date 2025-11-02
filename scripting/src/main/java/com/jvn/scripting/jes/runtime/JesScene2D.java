@@ -48,6 +48,8 @@ public class JesScene2D extends Scene2DBase {
   public java.util.Set<String> names() { return named.keySet(); }
   public Entity2D find(String name) { return named.get(name); }
   public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
+  public java.util.List<Binding> exportBindings() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(bindings)); }
+  public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
 
   @Override
   public void update(long deltaMs) {

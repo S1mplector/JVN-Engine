@@ -14,6 +14,10 @@ public class PhysicsBodyEntity2D extends Entity2D {
 
   public void setColor(double r, double g, double b, double a) { this.r = r; this.g = g; this.b = b; this.a = a; }
   public void setStroke(double r, double g, double b, double a, double w) { this.sr = r; this.sg = g; this.sb = b; this.sa = a; this.sw = Math.max(0, w); }
+  public double getColorR() { return r; }
+  public double getColorG() { return g; }
+  public double getColorB() { return b; }
+  public double getColorA() { return a; }
 
   @Override
   public void render(Blitter2D blit) {

@@ -36,6 +36,7 @@ public class JesExporter {
         pw.println("      w: " + p.getWidth());
         pw.println("      h: " + p.getHeight());
         // Note: Panel2D doesn't expose color getters, would need to add them
+        pw.println("      fill: rgb(" + p.getFillR() + "," + p.getFillG() + "," + p.getFillB() + "," + p.getFillA() + ")");
         pw.println("    }");
       } else if (entity instanceof Label2D l) {
         pw.println("    component Label2D {");
@@ -85,7 +86,7 @@ public class JesExporter {
             pw.println("      vy: " + body.getVy());
           }
           
-          // Note: PhysicsBodyEntity2D doesn't expose color getters
+          pw.println("      color: rgb(" + pb.getColorR() + "," + pb.getColorG() + "," + pb.getColorB() + "," + pb.getColorA() + ")");
           pw.println("    }");
         }
       } else if (entity instanceof ParticleEmitter2D pe) {
@@ -102,9 +103,41 @@ public class JesExporter {
     
     // Export input bindings (not accessible from JesScene2D currently)
     // Would need to expose bindings list
+    for (com.jvn.scripting.jes.runtime.JesScene2D.Binding b : scene.exportBindings()) {
+      pw.print("  on key \"" + escapeString(b.key) + "\" do " + b.action);
+      if (b.props != null && !b.props.isEmpty()) {
+        pw.println(" {");
+        for (java.util.Map.Entry<String,Object> e : b.props.entrySet()) {
+          pw.println("    " + e.getKey() + ": " + formatValue(e.getValue()));
+        }
+        pw.println("  }");
+      } else {
+        pw.println();
+      }
+    }
     
     // Export timeline (not accessible from JesScene2D currently)  
     // Would need to expose timeline list
+    java.util.List<com.jvn.scripting.jes.ast.JesAst.TimelineAction> tl = scene.exportTimeline();
+    if (tl != null && !tl.isEmpty()) {
+      pw.println("  timeline {");
+      for (com.jvn.scripting.jes.ast.JesAst.TimelineAction a : tl) {
+        if ("wait".equals(a.type)) {
+          Object ms = a.props.get("ms");
+          double v = ms instanceof Number n ? n.doubleValue() : 0;
+          pw.println("    wait " + formatNumber(v));
+        } else if ("call".equals(a.type)) {
+          pw.println("    call \"" + escapeString(a.target) + "\"");
+        } else if ("move".equals(a.type) || "rotate".equals(a.type) || "scale".equals(a.type)) {
+          pw.println("    " + a.type + " \"" + escapeString(a.target) + "\" {");
+          for (java.util.Map.Entry<String,Object> e : a.props.entrySet()) {
+            pw.println("      " + e.getKey() + ": " + formatValue(e.getValue()));
+          }
+          pw.println("    }");
+        }
+      }
+      pw.println("  }");
+    }
     
     pw.println("}");
     pw.flush();
@@ -117,6 +150,24 @@ public class JesExporter {
     return scene == null ? new java.util.HashMap<>() : scene.exportNamed();
   }
   
+  private static String formatNumber(double v) {
+    return Math.rint(v) == v ? Long.toString((long)v) : Double.toString(v);
+  }
+
+  private static String formatValue(Object v) {
+    if (v instanceof Number n) return formatNumber(n.doubleValue());
+    if (v instanceof Boolean b) return Boolean.toString(b);
+    if (v instanceof double[] arr) {
+      double r = arr.length > 0 ? arr[0] : 0;
+      double g = arr.length > 1 ? arr[1] : 0;
+      double bb = arr.length > 2 ? arr[2] : 0;
+      double a = arr.length > 3 ? arr[3] : 1.0;
+      return "rgb(" + formatNumber(r) + "," + formatNumber(g) + "," + formatNumber(bb) + "," + formatNumber(a) + ")";
+    }
+    if (v instanceof String s) return "\"" + escapeString(s) + "\"";
+    return "\"" + escapeString(String.valueOf(v)) + "\"";
+  }
+
   private static String escapeString(String s) {
     if (s == null) return "";
     return s.replace("\"", "\\\"")
