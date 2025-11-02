@@ -15,6 +15,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ColorPicker;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -102,7 +103,9 @@ public class EditorApp extends Application {
     inspector = new VBox(8);
     inspector.setMinWidth(280);
     inspector.setPrefWidth(320);
-    root.setRight(inspector);
+    ScrollPane inspectorScroll = new ScrollPane(inspector);
+    inspectorScroll.setFitToWidth(true);
+    root.setRight(inspectorScroll);
     sceneGraph = new VBox(8);
     sceneGraph.setMinWidth(200);
     sceneGraph.setPrefWidth(240);
@@ -224,6 +227,14 @@ public class EditorApp extends Application {
         } else {
           var a = b.getAabb(); if (x >= a.x && y >= a.y && x <= a.x + a.w && y <= a.y + a.h) { selected = e; break; }
         }
+      } else if (e instanceof com.jvn.core.scene2d.Sprite2D s) {
+        double sx = e.getX() - s.getOriginX() * s.getWidth();
+        double sy = e.getY() - s.getOriginY() * s.getHeight();
+        if (x >= sx && y >= sy && x <= sx + s.getWidth() && y <= sy + s.getHeight()) { selected = e; break; }
+      } else if (e instanceof Label2D l) {
+        // Rough bounding box for labels
+        double w = 100; double h = 30; // Estimate
+        if (x >= e.getX() - w/2 && y >= e.getY() - h && x <= e.getX() + w/2 && y <= e.getY()) { selected = e; break; }
       }
     }
   }
@@ -279,6 +290,20 @@ public class EditorApp extends Application {
       var alpha = makeNumberField("alpha", lbl.getAlpha(), v -> { lbl.setColor(lbl.getColorR(), lbl.getColorG(), lbl.getColorB(), v); });
 
       inspector.getChildren().addAll(rowText, size, cbBold, rowAlign, rowColor, alpha);
+    } else if (selected instanceof com.jvn.core.scene2d.Sprite2D sprite) {
+      HBox rowImage = new HBox(6);
+      Label lImage = new Label("image");
+      TextField tfImage = new TextField(sprite.getImagePath() == null ? "" : sprite.getImagePath());
+      tfImage.setOnAction(e -> { sprite.setImagePath(tfImage.getText()); status.setText("Updated image path"); });
+      rowImage.getChildren().addAll(lImage, tfImage);
+
+      var width = makeNumberField("width", sprite.getWidth(), v -> { sprite.setSize(v, sprite.getHeight()); });
+      var height = makeNumberField("height", sprite.getHeight(), v -> { sprite.setSize(sprite.getWidth(), v); });
+      var alpha = makeNumberField("alpha", sprite.getAlpha(), v -> { sprite.setAlpha(v); });
+      var originX = makeNumberField("originX", sprite.getOriginX(), v -> { sprite.setOrigin(v, sprite.getOriginY()); });
+      var originY = makeNumberField("originY", sprite.getOriginY(), v -> { sprite.setOrigin(sprite.getOriginX(), v); });
+
+      inspector.getChildren().addAll(rowImage, width, height, alpha, originX, originY);
     }
   }
 

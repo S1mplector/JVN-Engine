@@ -7,6 +7,7 @@ import com.jvn.core.scene2d.Scene2DBase;
 import com.jvn.core.input.Input;
 import com.jvn.core.scene2d.Entity2D;
 import com.jvn.scripting.jes.ast.JesAst;
+import com.jvn.core.animation.Easing;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +37,7 @@ public class JesScene2D extends Scene2DBase {
   private static class ActionRuntime {
     boolean started;
     double sx, sy, sRot, ssx, ssy;
+    Easing.Type easing = Easing.Type.LINEAR;
   }
 
   public PhysicsWorld2D getWorld() { return world; }
@@ -88,10 +90,17 @@ public class JesScene2D extends Scene2DBase {
         double ty = toNum(a.props.get("y"), e.getY());
         double dur = toNum(a.props.get("dur"), 0);
         ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
-        if (!st.started) { st.started = true; st.sx = e.getX(); st.sy = e.getY(); }
+        if (!st.started) { 
+          st.started = true; 
+          st.sx = e.getX(); 
+          st.sy = e.getY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
         tlElapsedMs += deltaMs;
         double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
-        e.setPosition(st.sx + (tx - st.sx) * p, st.sy + (ty - st.sy) * p);
+        double ep = Easing.apply(st.easing, p);
+        e.setPosition(st.sx + (tx - st.sx) * ep, st.sy + (ty - st.sy) * ep);
         if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
       }
       case "rotate" -> {
@@ -100,10 +109,16 @@ public class JesScene2D extends Scene2DBase {
         double tdeg = toNum(a.props.get("deg"), e.getRotationDeg());
         double dur = toNum(a.props.get("dur"), 0);
         ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
-        if (!st.started) { st.started = true; st.sRot = e.getRotationDeg(); }
+        if (!st.started) { 
+          st.started = true; 
+          st.sRot = e.getRotationDeg();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
         tlElapsedMs += deltaMs;
         double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
-        e.setRotationDeg(st.sRot + (tdeg - st.sRot) * p);
+        double ep = Easing.apply(st.easing, p);
+        e.setRotationDeg(st.sRot + (tdeg - st.sRot) * ep);
         if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
       }
       case "scale" -> {
@@ -113,10 +128,17 @@ public class JesScene2D extends Scene2DBase {
         double tsy = toNum(a.props.get("sy"), e.getScaleY());
         double dur = toNum(a.props.get("dur"), 0);
         ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
-        if (!st.started) { st.started = true; st.ssx = e.getScaleX(); st.ssy = e.getScaleY(); }
+        if (!st.started) { 
+          st.started = true; 
+          st.ssx = e.getScaleX(); 
+          st.ssy = e.getScaleY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
         tlElapsedMs += deltaMs;
         double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
-        e.setScale(st.ssx + (tsx - st.ssx) * p, st.ssy + (tsy - st.ssy) * p);
+        double ep = Easing.apply(st.easing, p);
+        e.setScale(st.ssx + (tsx - st.ssx) * ep, st.ssy + (tsy - st.ssy) * ep);
         if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
       }
       default -> { tlIndex++; tlElapsedMs = 0; }
@@ -172,5 +194,9 @@ public class JesScene2D extends Scene2DBase {
 
   private static double toNum(Object o, double def) {
     return o instanceof Number n ? n.doubleValue() : def;
+  }
+  
+  private static String toStr(Object o, String def) {
+    return o instanceof String s ? s : def;
   }
 }

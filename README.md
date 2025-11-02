@@ -9,22 +9,21 @@ Modern, modular 2D game engine with a lightweight scene graph, simple physics, a
 
 - Modules: `core`, `swing`, `fx`, `scripting`, `runtime`, `editor`
 - Rendering backends: Swing (`swing`) and JavaFX (`fx`)
-- Scripting: JES (JVN Engine Script) for scenes, entities, components, input, and timeline
-- Editor: open a JES file, preview, select entities, tweak properties live
+- Scene editor: Open a JES file, preview, select entities, tweak properties live
 
 ## Quick Start
 
 Prereqs: JDK 17+, Gradle (wrapper included).
 
-- Build scripting and editor:
-```bash
-./gradlew :scripting:build :editor:build -x test
-```
-
-- Run the Editor:
+### Run Editor
 ```bash
 ./gradlew :editor:run
 ```
+
+### Sample Files
+- `samples/sample.jes` - Basic demo
+- `samples/billiards.jes` - Physics showcase with billiards simulation
+- `samples/showcase.jes` - Complete feature demonstration
 Use File → Open to load `samples/sample.jes`. Click to select entities; edit properties in the inspector.
 
 - Run the Runtime with a JES script:
@@ -70,7 +69,29 @@ scene "Demo" {
 - `fx`: JavaFX implementation `FxBlitter2D` and app launcher helpers
 - `scripting`: JES tokenizer, parser, AST, and loader → builds `JesScene2D`
 - `runtime`: command-line runner (loads JES with `--jes`, selects UI via `--ui`)
-- `editor`: JavaFX editor with canvas viewport, selection overlay, and property inspector
+- `editor`: JavaFX### Editor
+- JavaFX-based scene preview
+- Entity selection and property inspection
+- Scene Graph panel for named entity navigation
+- Inspector panels for all component types
+  - Label2D: text, size, bold, align, color
+  - Sprite2D: image path, size, alpha, origin
+  - Panel2D: dimensions
+  - PhysicsBody2D: mass, restitution
+- Canvas picking for all entity types
+- Hot reload supportation
+
+## Features
+
+### Core 2D Components
+- **Entity2D**: Base transform (position, rotation, scale) and visibility
+- **Sprite2D**: Image rendering with region support and origin control
+- **Panel2D**: Filled rectangles with optional nine-patch
+- **Label2D**: Text rendering with font, size, bold, alignment, and color
+- **TileMap2D**: Efficient tile grid rendering
+- **SpriteAnimation2D**: Frame-based animations with loop and ping-pong modes
+- **ParticleEmitter2D**: Configurable particle systems with physics, loops, math, reusable prefabs
+- Engine: shaders, particle system, tilemaps, audio
 
 ## Documentation
 

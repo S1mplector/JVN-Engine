@@ -4,6 +4,7 @@ import com.jvn.core.physics.RigidBody2D;
 import com.jvn.core.scene2d.Label2D;
 import com.jvn.core.scene2d.Panel2D;
 import com.jvn.core.scene2d.Sprite2D;
+import com.jvn.core.scene2d.ParticleEmitter2D;
 import com.jvn.scripting.jes.ast.JesAst;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
@@ -83,6 +84,42 @@ public class JesLoader {
             try { lbl.setAlign(Label2D.Align.valueOf(align.toUpperCase())); } catch (Exception ignored) {}
             scene.add(lbl);
             scene.registerEntity(e.name, lbl);
+          }
+          case "ParticleEmitter2D" -> {
+            double x = num(c, "x", 0);
+            double y = num(c, "y", 0);
+            double emissionRate = num(c, "emissionRate", 10);
+            double minLife = num(c, "minLife", 1.0);
+            double maxLife = num(c, "maxLife", 3.0);
+            double minSize = num(c, "minSize", 2.0);
+            double maxSize = num(c, "maxSize", 8.0);
+            double endSizeScale = num(c, "endSizeScale", 0.1);
+            double minSpeed = num(c, "minSpeed", 50);
+            double maxSpeed = num(c, "maxSpeed", 150);
+            double minAngle = num(c, "minAngle", 0);
+            double maxAngle = num(c, "maxAngle", 360);
+            double gravityY = num(c, "gravityY", 100);
+            String texture = str(c, "texture", null);
+            boolean additive = bool(c, "additive", true);
+            
+            ParticleEmitter2D emitter = new ParticleEmitter2D();
+            emitter.setPosition(x, y);
+            emitter.setEmissionRate(emissionRate);
+            emitter.setLifeRange(minLife, maxLife);
+            emitter.setSizeRange(minSize, maxSize, endSizeScale);
+            emitter.setSpeedRange(minSpeed, maxSpeed);
+            emitter.setAngleRange(minAngle, maxAngle);
+            emitter.setGravity(gravityY);
+            if (texture != null) emitter.setTexture(texture);
+            emitter.setAdditive(additive);
+            
+            Object startColor = c.props.get("startColor");
+            if (startColor instanceof double[] arr) emitter.setStartColor(arr[0], arr[1], arr[2], arr[3]);
+            Object endColor = c.props.get("endColor");
+            if (endColor instanceof double[] arr) emitter.setEndColor(arr[0], arr[1], arr[2], arr[3]);
+            
+            scene.add(emitter);
+            scene.registerEntity(e.name, emitter);
           }
           case "PhysicsBody2D" -> {
             String shape = str(c, "shape", "circle").toLowerCase();
