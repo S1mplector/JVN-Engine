@@ -58,6 +58,9 @@ public class MainMenuScene implements Scene {
     VnScenario scenario = loadScenario(defaultScriptName);
     VnScene vnScene = new VnScene(scenario);
     if (audio != null) vnScene.setAudioFacade(audio);
+    if (engine != null && engine.getVnInteropFactory() != null) {
+      vnScene.setInterop(engine.getVnInteropFactory().create(engine));
+    }
     // Apply settings model to scene settings
     VnSettings s = vnScene.getState().getSettings();
     s.setTextSpeed(settingsModel.getTextSpeed());

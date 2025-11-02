@@ -78,6 +78,7 @@ public class JvnApp {
     
     // Create engine and show scene
     Engine engine = new Engine(cfg);
+    engine.setVnInteropFactory(e -> new RuntimeVnInterop(e));
     engine.start();
 
     if (jesScript != null) {
@@ -102,12 +103,7 @@ public class JvnApp {
         }
       }
     } else if (launchBilliards) {
-      try {
-        com.jvn.billiards.scene.BilliardsScene2D billiards = new com.jvn.billiards.scene.BilliardsScene2D();
-        engine.scenes().push(billiards);
-      } catch (Throwable t) {
-        log.warn("Failed to create BilliardsScene2D: {}", t.toString());
-      }
+      log.warn("Billiards module is not available; ignoring --billiards flag.");
     } else {
       VnSettings settingsModel = new VnSettings();
       VnSaveManager saveManager = new VnSaveManager();

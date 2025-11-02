@@ -5,6 +5,7 @@ import com.jvn.core.scene.Scene;
 import com.jvn.core.scene.SceneManager;
 import com.jvn.core.input.Input;
 import com.jvn.core.tween.TweenRunner;
+import com.jvn.core.vn.VnInteropFactory;
 
 public class Engine {
   private final ApplicationConfig config;
@@ -12,6 +13,7 @@ public class Engine {
   private final SceneManager sceneManager = new SceneManager();
   private final Input input = new Input();
   private final TweenRunner tweens = new TweenRunner();
+  private VnInteropFactory vnInteropFactory;
 
   public Engine(ApplicationConfig config) {
     this.config = config;
@@ -56,4 +58,7 @@ public class Engine {
    public TweenRunner tweens() {
      return tweens;
    }
+
+  public void setVnInteropFactory(VnInteropFactory f) { this.vnInteropFactory = f; }
+  public VnInteropFactory getVnInteropFactory() { return vnInteropFactory; }
 }

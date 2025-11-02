@@ -1,0 +1,49 @@
+# Interop Demo VN
+@scenario interop_demo
+
+@character narrator "Narrator"
+
+[call hud Interop demo loaded]
+[set score 0]
+
+Narrator: This demo shows HUD, Java calls, variables, and conditionals.
+
+@label menu
+Narrator: What do you want to try?
+> Show a HUD toast -> toast
+> Call a Java method -> java_call
+> Play with variables -> vars
+> Finish -> the_end
+
+@label toast
+[call hud Hello from VN!]
+[jump menu]
+
+@label java_call
+[java java.lang.Math#max 5 9]
+Narrator: Invoked java.lang.Math#max.
+[jump menu]
+
+@label vars
+Narrator: Let's adjust a 'score' variable.
+> Add +1 -> add1
+> Add +2 [if score == 0] -> add2
+> Continue when score >= 2 [if score >= 2] -> done_vars
+> Back -> menu
+
+@label add1
+[inc score 1]
+[call hud score +1]
+[jump vars]
+
+@label add2
+[inc score 2]
+[call hud score +2]
+[jump vars]
+
+@label done_vars
+Narrator: Condition passed. Proceeding.
+[jump menu]
+
+@label the_end
+[end]

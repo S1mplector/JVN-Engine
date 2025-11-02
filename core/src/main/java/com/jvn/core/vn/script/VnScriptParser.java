@@ -176,6 +176,21 @@ public class VnScriptParser {
               }
             }
             break;
+          case "menu":
+            builder.external("menu", arg == null ? "" : arg);
+            break;
+          case "settings":
+            builder.external("menu", "settings");
+            break;
+          case "mainmenu":
+            builder.external("menu", "main" + (arg == null || arg.isBlank() ? "" : (" " + arg)));
+            break;
+          case "load":
+            if (arg != null && !arg.isBlank()) builder.external("vns", "replace " + arg);
+            break;
+          case "goto":
+            if (arg != null && !arg.isBlank()) builder.external("vns", "goto " + arg);
+            break;
           case "set":
             if (arg != null && !arg.isBlank()) builder.external("var", "set " + arg);
             break;

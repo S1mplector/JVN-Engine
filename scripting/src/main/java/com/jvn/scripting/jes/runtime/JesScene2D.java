@@ -56,6 +56,13 @@ public class JesScene2D extends Scene2DBase {
   public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
   public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
+  public void invokeCall(String name, Map<String,Object> props) {
+    if (name == null || name.isBlank()) return;
+    Consumer<Map<String,Object>> h = callHandlers.get(name);
+    if (h != null) {
+      try { h.accept(props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
+    }
+  }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
