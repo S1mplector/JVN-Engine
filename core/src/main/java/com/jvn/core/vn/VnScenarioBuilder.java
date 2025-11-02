@@ -210,4 +210,14 @@ public class VnScenarioBuilder {
     );
     return this;
   }
+
+  // --- Interop ---
+  public VnScenarioBuilder external(String provider, String payload) {
+    scenarioBuilder.addNode(
+      VnNode.builder(VnNodeType.EXTERNAL)
+        .external(new VnExternalCommand(provider, payload))
+        .build()
+    );
+    return this;
+  }
 }

@@ -8,5 +8,6 @@ public enum VnNodeType {
   CHOICE,        // Present choices to the player
   BACKGROUND,    // Change background
   JUMP,          // Jump to a label
+  EXTERNAL,      // External interop call (jes/java/custom)
   END            // End of scenario
 }

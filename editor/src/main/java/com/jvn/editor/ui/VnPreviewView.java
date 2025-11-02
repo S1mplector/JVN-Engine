@@ -2,6 +2,7 @@ package com.jvn.editor.ui;
 
 import com.jvn.core.vn.VnNodeType;
 import com.jvn.core.vn.VnScene;
+import com.jvn.core.vn.DefaultVnInterop;
 import com.jvn.core.vn.VnScenario;
 import com.jvn.fx.vn.VnRenderer;
 import javafx.scene.canvas.Canvas;
@@ -60,6 +61,7 @@ public class VnPreviewView extends StackPane {
   public void setScenario(VnScenario scenario) {
     if (scenario == null) { this.scene = null; return; }
     this.scene = new VnScene(scenario);
+    this.scene.setInterop(new DefaultVnInterop());
     this.scene.onEnter();
   }
 

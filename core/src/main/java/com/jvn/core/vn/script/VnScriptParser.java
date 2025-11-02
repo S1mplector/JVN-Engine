@@ -169,6 +169,23 @@ public class VnScriptParser {
               }
             }
             break;
+          case "call":
+            // Syntax: [call <provider> <payload...>]
+            if (arg != null && !arg.isBlank()) {
+              String[] toks = arg.split("\\s+", 2);
+              String provider = toks[0];
+              String payload = toks.length > 1 ? toks[1] : "";
+              builder.external(provider, payload);
+            }
+            break;
+          case "jes":
+            // Shortcut for [call jes <payload>]
+            builder.external("jes", arg == null ? "" : arg);
+            break;
+          case "java":
+            // Shortcut for [call java <payload>]
+            builder.external("java", arg == null ? "" : arg);
+            break;
         }
         continue;
       }

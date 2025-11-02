@@ -14,6 +14,7 @@ public class VnScene implements Scene {
   private VnQuickSaveManager quickSaveManager;
   private boolean waitingNode = false;
   private long waitRemainingMs = 0;
+  private VnInterop interop;
 
   public VnScene(VnScenario scenario) {
     this.scenario = scenario;
@@ -42,6 +43,9 @@ public class VnScene implements Scene {
   public VnQuickSaveManager getQuickSaveManager() {
     return quickSaveManager;
   }
+
+  public void setInterop(VnInterop interop) { this.interop = interop; }
+  public VnInterop getInterop() { return interop; }
 
   @Override
   public void onEnter() {
@@ -229,6 +233,9 @@ public class VnScene implements Scene {
         }
         processCurrentNode();
         break;
+      case EXTERNAL:
+        processExternalNode(node);
+        break;
       case CHOICE:
         // Choices wait for player input
         break;
@@ -259,6 +266,19 @@ public class VnScene implements Scene {
     if (node.getBackgroundId() != null) {
       state.setCurrentBackgroundId(node.getBackgroundId());
     }
+  }
+
+  private void processExternalNode(VnNode node) {
+    VnExternalCommand cmd = node.getExternalCommand();
+    if (cmd != null && interop != null) {
+      try {
+        interop.handle(cmd, this);
+      } catch (Exception ignored) {
+        // keep VN progressing even if interop fails
+      }
+    }
+    state.advance();
+    processCurrentNode();
   }
 
   private void processJumpNode(VnNode node) {
