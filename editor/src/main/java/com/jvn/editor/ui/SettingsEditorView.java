@@ -1,6 +1,4 @@
 package com.jvn.editor.ui;
-
-import com.jvn.core.vn.VnSettings;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
@@ -10,6 +8,29 @@ import java.io.*;
 import java.util.Properties;
 
 public class SettingsEditorView extends BorderPane {
+  public static class SettingsModel {
+    private int textSpeed = 40;
+    private float bgmVolume = 0.7f;
+    private float sfxVolume = 0.7f;
+    private float voiceVolume = 0.7f;
+    private long autoPlayDelay = 1500;
+    private boolean skipUnreadText;
+    private boolean skipAfterChoices;
+    public int getTextSpeed() { return textSpeed; }
+    public void setTextSpeed(int v) { textSpeed = v; }
+    public float getBgmVolume() { return bgmVolume; }
+    public void setBgmVolume(float v) { bgmVolume = v; }
+    public float getSfxVolume() { return sfxVolume; }
+    public void setSfxVolume(float v) { sfxVolume = v; }
+    public float getVoiceVolume() { return voiceVolume; }
+    public void setVoiceVolume(float v) { voiceVolume = v; }
+    public long getAutoPlayDelay() { return autoPlayDelay; }
+    public void setAutoPlayDelay(long v) { autoPlayDelay = v; }
+    public boolean isSkipUnreadText() { return skipUnreadText; }
+    public void setSkipUnreadText(boolean b) { skipUnreadText = b; }
+    public boolean isSkipAfterChoices() { return skipAfterChoices; }
+    public void setSkipAfterChoices(boolean b) { skipAfterChoices = b; }
+  }
   private File projectRoot;
   private final Slider slText = new Slider(10, 120, 40);
   private final Slider slBgm = new Slider(0, 1, 0.7);
@@ -34,7 +55,7 @@ public class SettingsEditorView extends BorderPane {
     ToolBar tb = new ToolBar();
     Button bLoad = new Button("Load"); bLoad.setOnAction(e -> load());
     Button bSave = new Button("Save"); bSave.setOnAction(e -> save());
-    Button bDefaults = new Button("Defaults"); bDefaults.setOnAction(e -> setFromModel(new VnSettings()));
+    Button bDefaults = new Button("Defaults"); bDefaults.setOnAction(e -> setFromModel(new SettingsModel()));
     tb.getItems().addAll(bLoad, bSave, bDefaults);
 
     setTop(tb);
@@ -46,7 +67,7 @@ public class SettingsEditorView extends BorderPane {
     load();
   }
 
-  public void setFromModel(VnSettings s) {
+  public void setFromModel(SettingsModel s) {
     if (s == null) return;
     slText.setValue(s.getTextSpeed());
     slBgm.setValue(s.getBgmVolume());
@@ -57,8 +78,8 @@ public class SettingsEditorView extends BorderPane {
     cbSkipAfterChoices.setSelected(s.isSkipAfterChoices());
   }
 
-  public VnSettings toModel() {
-    VnSettings s = new VnSettings();
+  public SettingsModel toModel() {
+    SettingsModel s = new SettingsModel();
     s.setTextSpeed((int) Math.round(slText.getValue()));
     s.setBgmVolume((float) slBgm.getValue());
     s.setSfxVolume((float) slSfx.getValue());
@@ -72,7 +93,7 @@ public class SettingsEditorView extends BorderPane {
   private void save() {
     if (projectRoot == null) return;
     Properties p = new Properties();
-    VnSettings s = toModel();
+    SettingsModel s = toModel();
     p.setProperty("textSpeed", Integer.toString(s.getTextSpeed()));
     p.setProperty("bgm", Float.toString(s.getBgmVolume()));
     p.setProperty("sfx", Float.toString(s.getSfxVolume()));
@@ -90,7 +111,7 @@ public class SettingsEditorView extends BorderPane {
     if (!f.exists()) return;
     Properties p = new Properties();
     try (FileInputStream fis = new FileInputStream(f)) { p.load(fis); } catch (Exception ignored) {}
-    VnSettings s = new VnSettings();
+    SettingsModel s = new SettingsModel();
     try { s.setTextSpeed(Integer.parseInt(p.getProperty("textSpeed", "40"))); } catch (Exception ignored) {}
     try { s.setBgmVolume(Float.parseFloat(p.getProperty("bgm", "0.7"))); } catch (Exception ignored) {}
     try { s.setSfxVolume(Float.parseFloat(p.getProperty("sfx", "0.7"))); } catch (Exception ignored) {}

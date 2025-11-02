@@ -5,6 +5,19 @@ import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.control.TitledPane;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Label;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.Alert;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.ScrollPane;
 import javafx.stage.FileChooser;
 
 import java.io.*;
@@ -17,7 +30,9 @@ public class StoryTimelineView extends BorderPane {
     public String name;
     public String script;
     public String entryLabel;
-    public String toLine() { return "ARC|" + nn(name) + "|" + nn(script) + "|" + nn(entryLabel); }
+    public double x = 40;
+    public double y = 40;
+    public String toLine() { return "ARC|" + nn(name) + "|" + nn(script) + "|" + nn(entryLabel) + "|" + x + "|" + y; }
   }
 
   private void validate() {
@@ -75,6 +90,8 @@ public class StoryTimelineView extends BorderPane {
 
   private final ListView<Arc> arcs = new ListView<>();
   private final ListView<Link> links = new ListView<>();
+  private final StoryGraphPane graph = new StoryGraphPane();
+  private final ScrollPane graphScroll = new ScrollPane(graph);
   private File projectRoot;
   private Consumer<Arc> onRunArc;
   private Consumer<Link> onRunLink;
@@ -93,11 +110,17 @@ public class StoryTimelineView extends BorderPane {
       }
     });
 
-    SplitPane sp = new SplitPane();
-    sp.setOrientation(javafx.geometry.Orientation.VERTICAL);
-    sp.getItems().addAll(new TitledPane("Arcs", arcs), new TitledPane("Links", links));
-    sp.setDividerPositions(0.5);
-    setCenter(sp);
+    // Graph on top, lists below
+    SplitPane lists = new SplitPane();
+    lists.setOrientation(javafx.geometry.Orientation.VERTICAL);
+    lists.getItems().addAll(new TitledPane("Arcs", arcs), new TitledPane("Links", links));
+    lists.setDividerPositions(0.5);
+    graphScroll.setFitToWidth(true); graphScroll.setFitToHeight(true);
+    SplitPane rootSplit = new SplitPane();
+    rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
+    rootSplit.getItems().addAll(graphScroll, lists);
+    rootSplit.setDividerPositions(0.55);
+    setCenter(rootSplit);
 
     Button bAddArc = new Button("Add Arc");
     bAddArc.setOnAction(e -> addArc());
@@ -121,19 +144,33 @@ public class StoryTimelineView extends BorderPane {
     bLoad.setOnAction(e -> load());
     Button bValidate = new Button("Validate");
     bValidate.setOnAction(e -> validate());
-    HBox bar = new HBox(6, bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, bSave, bLoad, bValidate);
+    TextField tfSearch = new TextField(); tfSearch.setPromptText("Search arcs...");
+    tfSearch.textProperty().addListener((o, ov, nv) -> graph.highlight(nv));
+    Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
+    Slider zoom = new Slider(0.6, 2.0, 1.0); zoom.setPrefWidth(120);
+    zoom.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
+    HBox bar = new HBox(6, bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoom, tfSearch, bAuto, bSave, bLoad, bValidate);
     bar.setPadding(new Insets(6));
     setTop(bar);
+
+    // Graph actions wiring
+    graph.setOnRunArc(a -> { if (onRunArc != null) onRunArc.accept(a); });
+    graph.setOnRunLink(l -> { if (onRunLink != null) onRunLink.accept(l); });
+    arcs.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) -> {
+      if (nv != null) graph.highlight(nv.name);
+    });
   }
 
   public void setProjectRoot(File dir) {
     this.projectRoot = dir;
     load();
+    refreshGraph();
   }
 
   public void setOnRunArc(Consumer<Arc> c) { this.onRunArc = c; }
   public void setOnRunLink(Consumer<Link> c) { this.onRunLink = c; }
   public List<Arc> getArcs() { return new ArrayList<>(arcs.getItems()); }
+  public List<Link> getLinks() { return new ArrayList<>(links.getItems()); }
   public Arc findArc(String name) {
     for (Arc a : arcs.getItems()) if (a != null && name != null && name.equals(a.name)) return a; return null;
   }
@@ -152,6 +189,7 @@ public class StoryTimelineView extends BorderPane {
     var lres = ldlg.showAndWait(); String label = lres.isEmpty() ? "" : lres.get().trim();
     Arc a = new Arc(); a.name = name; a.script = toRelative(f); a.entryLabel = label;
     arcs.getItems().add(a);
+    refreshGraph();
   }
 
   private void addLink() {
@@ -171,6 +209,7 @@ public class StoryTimelineView extends BorderPane {
     Arc fa = fromArc.getValue(); Arc ta = toArc.getValue(); if (fa == null || ta == null) return;
     Link l = new Link(); l.fromArc = fa.name; l.fromLabel = fromLabel.getText(); l.toArc = ta.name; l.toLabel = toLabel.getText();
     links.getItems().add(l);
+    refreshGraph();
   }
 
   private void openArc() {
@@ -206,7 +245,14 @@ public class StoryTimelineView extends BorderPane {
       while ((line = br.readLine()) != null) {
         if (line.startsWith("ARC|")) {
           String[] t = line.split("\\|", -1);
-          if (t.length >= 4) { Arc a = new Arc(); a.name = n(t[1]); a.script = n(t[2]); a.entryLabel = n(t[3]); alist.add(a); }
+          if (t.length >= 4) {
+            Arc a = new Arc(); a.name = n(t[1]); a.script = n(t[2]); a.entryLabel = n(t[3]);
+            if (t.length >= 6) {
+              try { a.x = Double.parseDouble(t[4]); } catch (Exception ignore) {}
+              try { a.y = Double.parseDouble(t[5]); } catch (Exception ignore) {}
+            }
+            alist.add(a);
+          }
         } else if (line.startsWith("LINK|")) {
           String[] t = line.split("\\|", -1);
           if (t.length >= 5) { Link l = new Link(); l.fromArc = n(t[1]); l.fromLabel = n(t[2]); l.toArc = n(t[3]); l.toLabel = n(t[4]); llist.add(l); }
@@ -215,6 +261,7 @@ public class StoryTimelineView extends BorderPane {
     } catch (Exception ignored) {}
     arcs.getItems().setAll(alist);
     links.getItems().setAll(llist);
+    refreshGraph();
   }
 
   private static String nn(String s) { return s == null ? "" : s; }
@@ -241,5 +288,9 @@ public class StoryTimelineView extends BorderPane {
     File f = new File(p);
     if (f.isAbsolute() || projectRoot == null) return f;
     return new File(projectRoot, p);
+  }
+
+  private void refreshGraph() {
+    graph.setModel(getArcs(), getLinks());
   }
 }
