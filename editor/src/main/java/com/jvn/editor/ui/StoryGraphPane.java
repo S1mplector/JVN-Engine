@@ -25,6 +25,8 @@ public class StoryGraphPane extends Pane {
     final Rectangle rect;
     final Text label;
     double dragDX, dragDY;
+    java.util.function.Consumer<javafx.scene.input.MouseEvent> mousePressedHook;
+    java.util.function.Consumer<javafx.scene.input.MouseEvent> mouseReleasedHook;
     NodeView(StoryTimelineView.Arc arc) {
       this.arc = arc;
       this.rect = new Rectangle(140, 44, Color.web("#2b2f3a"));
@@ -43,6 +45,7 @@ public class StoryGraphPane extends Pane {
     private void enableDrag() {
       setOnMousePressed(e -> {
         if (e.getButton() != MouseButton.PRIMARY) return;
+        if (mousePressedHook != null) mousePressedHook.accept(e);
         dragDX = e.getSceneX() - getLayoutX();
         dragDY = e.getSceneY() - getLayoutY();
       });
@@ -54,6 +57,7 @@ public class StoryGraphPane extends Pane {
         arc.x = nx; arc.y = ny;
         if (onMoved != null) onMoved.run();
       });
+      setOnMouseReleased(e -> { if (mouseReleasedHook != null) mouseReleasedHook.accept(e); });
     }
     Runnable onMoved;
   }
@@ -62,6 +66,8 @@ public class StoryGraphPane extends Pane {
   private final List<Group> linkViews = new ArrayList<>();
   private List<StoryTimelineView.Arc> arcs = new ArrayList<>();
   private List<StoryTimelineView.Link> links = new ArrayList<>();
+  private NodeView linkingFrom;
+  private Line tempLine;
 
   private Consumer<StoryTimelineView.Arc> onRunArc;
   private Consumer<StoryTimelineView.Link> onRunLink;
@@ -70,6 +76,13 @@ public class StoryGraphPane extends Pane {
     setPadding(new Insets(8));
     setPrefSize(1200, 800);
     setMinSize(600, 400);
+    setOnMouseMoved(e -> {
+      if (tempLine != null) {
+        tempLine.setEndX(e.getX());
+        tempLine.setEndY(e.getY());
+      }
+    });
+    setOnMouseReleased(e -> cancelLinking());
   }
 
   public void setOnRunArc(Consumer<StoryTimelineView.Arc> c) { this.onRunArc = c; }
@@ -111,6 +124,8 @@ public class StoryGraphPane extends Pane {
       if (Double.isNaN(a.x)) a.x = 40; if (Double.isNaN(a.y)) a.y = 40;
       NodeView nv = new NodeView(a);
       nv.onMoved = this::updateLinks;
+      nv.mousePressedHook = e -> { if (e.isShiftDown() && e.getButton() == MouseButton.PRIMARY) startLinking(nv, e.getX(), e.getY()); };
+      nv.mouseReleasedHook = e -> { if (linkingFrom != null) finishLinking(nv); };
       ContextMenu cm = new ContextMenu();
       MenuItem miOpen = new MenuItem("Open");
       miOpen.setOnAction(e -> { if (onRunArc != null) onRunArc.accept(a); });
@@ -125,7 +140,29 @@ public class StoryGraphPane extends Pane {
         javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
       });
       cm.getItems().addAll(miOpen, miRun, miCopyGoto);
-      nv.setOnMouseClicked(e -> { if (e.getButton() == MouseButton.SECONDARY) cm.show(nv, e.getScreenX(), e.getScreenY()); else cm.hide(); });
+      nv.setOnMouseClicked(e -> {
+        if (e.getButton() == MouseButton.SECONDARY) {
+          cm.show(nv, e.getScreenX(), e.getScreenY());
+        } else {
+          cm.hide();
+          if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+            // Rename arc on double click
+            String old = nv.arc.name;
+            javafx.scene.control.TextInputDialog dlg = new javafx.scene.control.TextInputDialog(old == null ? "" : old);
+            dlg.setHeaderText(null); dlg.setTitle("Rename Arc"); dlg.setContentText("Arc name:");
+            var res = dlg.showAndWait();
+            if (res.isPresent()) {
+              String nn = res.get().trim();
+              if (!nn.isEmpty() && !nn.equals(old)) {
+                nv.arc.name = nn;
+                nv.label.setText(nn);
+                updateLinkArcNames(old, nn);
+                refresh();
+              }
+            }
+          }
+        }
+      });
       nodeMap.put(a.name, nv);
       getChildren().add(nv);
     }
@@ -136,6 +173,11 @@ public class StoryGraphPane extends Pane {
       NodeView to = nodeMap.get(l.toArc);
       if (from == null || to == null) continue;
       Group g = drawArrow(from, to);
+      g.setOnMouseClicked(e -> {
+        if (e.getButton() == MouseButton.PRIMARY && onRunLink != null) {
+          onRunLink.accept(toLink(from, to));
+        }
+      });
       linkViews.add(g);
       getChildren().add(0, g); // behind nodes
     }
@@ -165,11 +207,54 @@ public class StoryGraphPane extends Pane {
     return g;
   }
 
+  private StoryTimelineView.Link toLink(NodeView from, NodeView to) {
+    StoryTimelineView.Link l = new StoryTimelineView.Link();
+    l.fromArc = from.arc.name;
+    l.fromLabel = "";
+    l.toArc = to.arc.name;
+    l.toLabel = to.arc.entryLabel == null ? "" : to.arc.entryLabel;
+    return l;
+  }
+
   private void updateLinks() {
-    for (int i = 0; i < getChildren().size(); i++) {
-      if (!(getChildren().get(i) instanceof Group)) continue;
-    }
     // Rebuild links for simplicity
     setModel(arcs, links);
+  }
+
+  private void startLinking(NodeView from, double sceneX, double sceneY) {
+    linkingFrom = from;
+    tempLine = new Line();
+    tempLine.setStroke(Color.web("#9fb3ff"));
+    tempLine.getStrokeDashArray().setAll(8.0, 8.0);
+    double sx = from.getLayoutX() + from.rect.getWidth() / 2.0;
+    double sy = from.getLayoutY() + from.rect.getHeight() / 2.0;
+    tempLine.setStartX(sx); tempLine.setStartY(sy);
+    tempLine.setEndX(sceneX - getLayoutX()); tempLine.setEndY(sceneY - getLayoutY());
+    getChildren().add(0, tempLine);
+  }
+
+  private void cancelLinking() {
+    if (tempLine != null) getChildren().remove(tempLine);
+    tempLine = null; linkingFrom = null;
+  }
+
+  private void finishLinking(NodeView target) {
+    if (linkingFrom == null || target == null || linkingFrom == target) { cancelLinking(); return; }
+    javafx.scene.control.TextInputDialog dlg = new javafx.scene.control.TextInputDialog("");
+    dlg.setHeaderText(null); dlg.setTitle("Link Label (optional)"); dlg.setContentText("To Label:");
+    var res = dlg.showAndWait(); String toLabel = res.isPresent() ? res.get().trim() : "";
+    StoryTimelineView.Link l = new StoryTimelineView.Link();
+    l.fromArc = linkingFrom.arc.name; l.fromLabel = ""; l.toArc = target.arc.name; l.toLabel = toLabel;
+    links.add(l);
+    cancelLinking();
+    refresh();
+  }
+
+  private void updateLinkArcNames(String oldName, String newName) {
+    if (oldName == null || newName == null) return;
+    for (StoryTimelineView.Link l : links) {
+      if (oldName.equals(l.fromArc)) l.fromArc = newName;
+      if (oldName.equals(l.toArc)) l.toArc = newName;
+    }
   }
 }
