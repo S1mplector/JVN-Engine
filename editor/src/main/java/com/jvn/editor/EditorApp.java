@@ -16,6 +16,8 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.Tab;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -26,6 +28,7 @@ import java.io.InputStream;
 import java.io.FileInputStream;
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.file.Files;
 import javafx.scene.paint.Color;
 
 import com.jvn.scripting.jes.JesLoader;
@@ -39,6 +42,8 @@ import com.jvn.core.scene2d.Label2D;
 import com.jvn.core.physics.RigidBody2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
 import com.jvn.core.input.Input;
+import com.jvn.core.graphics.Camera2D;
+import com.jvn.editor.ui.JesCodeEditor;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
@@ -55,6 +60,14 @@ public class EditorApp extends Application {
   private VBox sceneGraph;
   private ListView<String> sceneList;
   private Input input = new Input();
+  private TabPane tabs;
+  private JesCodeEditor codeView;
+  private Camera2D camera = new Camera2D();
+  private boolean panning = false;
+  private double panLastX, panLastY;
+  private TextField sceneFilter;
+  private javafx.collections.ObservableList<String> sceneItems;
+  private java.util.List<String> allNames;
 
   public static void main(String[] args) {
     launch(args);
@@ -83,8 +96,9 @@ public class EditorApp extends Application {
     HBox toolbar = new HBox(8);
     Button btnOpen = new Button("Open"); btnOpen.setOnAction(e -> doOpen(primaryStage));
     Button btnReload = new Button("Reload"); btnReload.setOnAction(e -> doReload());
+    Button btnApply = new Button("Apply Code"); btnApply.setOnAction(e -> applyCodeFromEditor());
     status = new Label("Ready");
-    toolbar.getChildren().addAll(btnOpen, btnReload, status);
+    toolbar.getChildren().addAll(btnOpen, btnReload, btnApply, status);
 
     // Canvas viewport
     canvas = new Canvas(1200, 740);
@@ -95,17 +109,45 @@ public class EditorApp extends Application {
       buildInspector();
     });
     canvas.setOnMouseMoved(e -> { input.setMousePosition(e.getX(), e.getY()); });
-    canvas.setOnMouseDragged(e -> { input.setMousePosition(e.getX(), e.getY()); });
-    canvas.setOnScroll(e -> { input.addScrollDeltaY(e.getDeltaY()); });
-    canvas.setOnMousePressed(e -> { input.mouseDown(mapButton(e.getButton())); });
-    canvas.setOnMouseReleased(e -> { input.mouseUp(mapButton(e.getButton())); });
+    canvas.setOnMouseDragged(e -> {
+      input.setMousePosition(e.getX(), e.getY());
+      if (panning) {
+        double dx = e.getX() - panLastX;
+        double dy = e.getY() - panLastY;
+        panLastX = e.getX(); panLastY = e.getY();
+        camera.setPosition(camera.getX() - dx / camera.getZoom(), camera.getY() - dy / camera.getZoom());
+      }
+    });
+    canvas.setOnScroll(e -> {
+      input.addScrollDeltaY(e.getDeltaY());
+      double factor = Math.pow(1.05, e.getDeltaY() / 40.0);
+      camera.setZoom(camera.getZoom() * factor);
+    });
+    canvas.setOnMousePressed(e -> {
+      input.mouseDown(mapButton(e.getButton()));
+      if (e.getButton() == MouseButton.MIDDLE || e.getButton() == MouseButton.SECONDARY) {
+        panning = true; panLastX = e.getX(); panLastY = e.getY();
+      }
+    });
+    canvas.setOnMouseReleased(e -> {
+      input.mouseUp(mapButton(e.getButton()));
+      if (e.getButton() == MouseButton.MIDDLE || e.getButton() == MouseButton.SECONDARY) {
+        panning = false;
+      }
+    });
 
     // Layout
     BorderPane top = new BorderPane();
     top.setTop(mb);
     top.setCenter(toolbar);
     root.setTop(top);
-    root.setCenter(canvas);
+    // Center: TabPane with Canvas and JES Code editor
+    codeView = new JesCodeEditor();
+    tabs = new TabPane();
+    Tab tabCanvas = new Tab("Canvas", canvas); tabCanvas.setClosable(false);
+    Tab tabCode = new Tab("JES Code", codeView); tabCode.setClosable(false);
+    tabs.getTabs().addAll(tabCanvas, tabCode);
+    root.setCenter(tabs);
     inspector = new VBox(8);
     inspector.setMinWidth(280);
     inspector.setPrefWidth(320);
@@ -154,6 +196,8 @@ public class EditorApp extends Application {
       lastOpened = f;
       status.setText("Loaded: " + f.getName());
       if (current != null) current.setInput(input);
+      if (current != null) current.setCamera(camera);
+      try { String code = Files.readString(f.toPath()); codeView.setText(code); } catch (Exception ignore) {}
       selected = null;
       buildInspector();
       buildSceneGraph();
@@ -170,11 +214,34 @@ public class EditorApp extends Application {
       current = JesLoader.load(in);
       status.setText("Reloaded: " + lastOpened.getName());
       if (current != null) current.setInput(input);
+      if (current != null) current.setCamera(camera);
+      try { String code = Files.readString(lastOpened.toPath()); codeView.setText(code); } catch (Exception ignore) {}
       selected = null;
       buildInspector();
       buildSceneGraph();
     } catch (Exception ex) {
       status.setText("Reload failed");
+    }
+  }
+
+  private void applyCodeFromEditor() {
+    try {
+      String code = codeView.getText();
+      if (code == null || code.isBlank()) return;
+      current = JesLoader.load(code);
+      if (current != null) {
+        current.setInput(input);
+        current.setCamera(camera);
+        selected = null;
+        buildInspector();
+        buildSceneGraph();
+        status.setText("Applied code to scene");
+        tabs.getSelectionModel().selectFirst();
+      }
+    } catch (Exception ex) {
+      status.setText("Apply failed");
+      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to apply code: " + ex.getMessage());
+      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
     }
   }
 
@@ -185,6 +252,7 @@ public class EditorApp extends Application {
       String sceneName = stripExt(lastOpened.getName());
       String content = JesExporter.export(current, sceneName);
       try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
+      if (codeView != null) codeView.setText(content);
       status.setText("Saved: " + lastOpened.getName());
     } catch (Exception ex) {
       status.setText("Save failed");
@@ -210,6 +278,7 @@ public class EditorApp extends Application {
       String content = JesExporter.export(current, sceneName);
       try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
       lastOpened = f;
+      if (codeView != null) codeView.setText(content);
       status.setText("Saved: " + f.getName());
     } catch (Exception ex) {
       status.setText("Save As failed");
@@ -364,16 +433,30 @@ public class EditorApp extends Application {
     sceneGraph.getChildren().clear();
     if (current == null) { sceneGraph.getChildren().add(new Label("No scene")); return; }
     sceneGraph.getChildren().add(new Label("Scene Graph"));
+    if (sceneFilter == null) {
+      sceneFilter = new TextField(); sceneFilter.setPromptText("Filter by name...");
+      sceneFilter.setOnKeyReleased(e -> applySceneFilter());
+    }
     sceneList = new ListView<>();
-    var items = javafx.collections.FXCollections.<String>observableArrayList();
-    var sorted = new java.util.TreeSet<String>(current.names());
-    items.addAll(sorted);
-    sceneList.setItems(items);
+    allNames = new java.util.ArrayList<>(current.names());
+    java.util.Collections.sort(allNames);
+    sceneItems = javafx.collections.FXCollections.observableArrayList(allNames);
+    sceneList.setItems(sceneItems);
     sceneList.setOnMouseClicked(e -> {
       String name = sceneList.getSelectionModel().getSelectedItem();
       if (name != null) { selected = current.find(name); buildInspector(); }
     });
-    sceneGraph.getChildren().add(sceneList);
+    sceneGraph.getChildren().addAll(sceneFilter, sceneList);
+  }
+
+  private void applySceneFilter() {
+    if (sceneItems == null || allNames == null) return;
+    String q = sceneFilter == null ? "" : sceneFilter.getText();
+    if (q == null) q = "";
+    final String qq = q.toLowerCase();
+    java.util.List<String> filtered = new java.util.ArrayList<>();
+    for (String n : allNames) { if (n.toLowerCase().contains(qq)) filtered.add(n); }
+    sceneItems.setAll(filtered);
   }
 
   private HBox makeNumberField(String label, double initial, java.util.function.DoubleConsumer onChange) {

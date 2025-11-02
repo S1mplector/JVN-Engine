@@ -1,0 +1,25 @@
+.code-area {
+  -fx-background-color: #0e0f13;
+  -fx-text-fill: #c9d1d9;
+}
+
+.keyword {
+  -fx-fill: #c678dd;
+  -fx-font-weight: bold;
+}
+
+.string {
+  -fx-fill: #98c379;
+}
+
+.number {
+  -fx-fill: #d19a66;
+}
+
+.comment {
+  -fx-fill: #5c6370;
+}
+
+.punct {
+  -fx-fill: #61afef;
+}

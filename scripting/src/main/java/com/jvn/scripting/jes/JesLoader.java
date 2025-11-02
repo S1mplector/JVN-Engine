@@ -18,14 +18,22 @@ public class JesLoader {
     JesAst.Program prog = new JesParser(toks).parseProgram();
     if (prog.scenes.isEmpty()) throw new IllegalArgumentException("No scene defined");
     JesAst.SceneDecl s = prog.scenes.get(0);
+    return buildScene(s);
+  }
+
+  public static JesScene2D load(String code) throws Exception {
+    java.io.InputStream in = new java.io.ByteArrayInputStream(
+      (code == null ? "" : code).getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    );
+    return load(in);
+  }
+
+  private static JesScene2D buildScene(JesAst.SceneDecl s) {
     JesScene2D scene = new JesScene2D();
-    // Bindings
     for (JesAst.InputBinding b : s.bindings) {
       scene.addBinding(b.key, b.action, b.props);
     }
-    // Timeline
     scene.setTimeline(s.timeline);
-    // Entities/components
     for (JesAst.EntityDecl e : s.entities) {
       e.components.forEach(c -> {
         switch (c.type) {
@@ -101,7 +109,6 @@ public class JesLoader {
             double gravityY = num(c, "gravityY", 100);
             String texture = str(c, "texture", null);
             boolean additive = bool(c, "additive", true);
-            
             ParticleEmitter2D emitter = new ParticleEmitter2D();
             emitter.setPosition(x, y);
             emitter.setEmissionRate(emissionRate);
@@ -112,12 +119,8 @@ public class JesLoader {
             emitter.setGravity(gravityY);
             if (texture != null) emitter.setTexture(texture);
             emitter.setAdditive(additive);
-            
-            Object startColor = c.props.get("startColor");
-            if (startColor instanceof double[] arr) emitter.setStartColor(arr[0], arr[1], arr[2], arr[3]);
-            Object endColor = c.props.get("endColor");
-            if (endColor instanceof double[] arr) emitter.setEndColor(arr[0], arr[1], arr[2], arr[3]);
-            
+            Object startColor = c.props.get("startColor"); if (startColor instanceof double[] arr1) emitter.setStartColor(arr1[0], arr1[1], arr1[2], arr1[3]);
+            Object endColor = c.props.get("endColor"); if (endColor instanceof double[] arr2) emitter.setEndColor(arr2[0], arr2[1], arr2[2], arr2[3]);
             scene.add(emitter);
             scene.registerEntity(e.name, emitter);
           }
@@ -142,13 +145,10 @@ public class JesLoader {
             body.setRestitution(restitution);
             body.setStatic(stat);
             body.setSensor(sensor);
-            double vx = num(c, "vx", 0);
-            double vy = num(c, "vy", 0);
-            body.setVelocity(vx, vy);
+            double vx = num(c, "vx", 0); double vy = num(c, "vy", 0); body.setVelocity(vx, vy);
             scene.getWorld().addBody(body);
             PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
-            Object fill = c.props.get("color");
-            if (fill instanceof double[] arr) vis.setColor(arr[0], arr[1], arr[2], arr[3]);
+            Object fill = c.props.get("color"); if (fill instanceof double[] arr) vis.setColor(arr[0], arr[1], arr[2], arr[3]);
             scene.add(vis);
             scene.registerEntity(e.name, vis);
           }
