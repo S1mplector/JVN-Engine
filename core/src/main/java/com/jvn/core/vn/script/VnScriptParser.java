@@ -97,7 +97,14 @@ public class VnScriptParser {
       if (choiceMatcher.matches()) {
         String text = choiceMatcher.group(1);
         String target = choiceMatcher.groupCount() > 1 ? choiceMatcher.group(2) : null;
+        String cond = null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.*)\\[if\\s+([^\\]]+)\\]$").matcher(text);
+        if (m.matches()) {
+          text = m.group(1).trim();
+          cond = m.group(2).trim();
+        }
         Choice.Builder choiceBuilder = Choice.builder().text(text);
+        if (cond != null) choiceBuilder.condition(cond);
         if (target != null) {
           choiceBuilder.targetLabel(target);
         }
@@ -168,6 +175,27 @@ public class VnScriptParser {
                 builder.transition(type, dur, bg);
               }
             }
+            break;
+          case "set":
+            if (arg != null && !arg.isBlank()) builder.external("var", "set " + arg);
+            break;
+          case "inc":
+            if (arg != null && !arg.isBlank()) builder.external("var", "inc " + arg);
+            break;
+          case "dec":
+            if (arg != null && !arg.isBlank()) builder.external("var", "dec " + arg);
+            break;
+          case "flag":
+            if (arg != null && !arg.isBlank()) builder.external("var", "flag " + arg);
+            break;
+          case "unflag":
+            if (arg != null && !arg.isBlank()) builder.external("var", "unflag " + arg);
+            break;
+          case "clear":
+            if (arg != null && !arg.isBlank()) builder.external("var", "clear " + arg);
+            break;
+          case "if":
+            if (arg != null && !arg.isBlank()) builder.external("cond", "if " + arg);
             break;
           case "call":
             // Syntax: [call <provider> <payload...>]

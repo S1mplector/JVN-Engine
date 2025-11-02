@@ -155,6 +155,10 @@ public class VnScene implements Scene {
     if (choiceIndex >= 0 && choiceIndex < current.getChoices().size()) {
       Choice choice = current.getChoices().get(choiceIndex);
       if (!choice.isEnabled()) return;
+      String cond = choice.getCondition();
+      if (cond != null && !cond.isEmpty()) {
+        if (!evalChoiceCondition(cond)) return;
+      }
       if (choice.getTargetLabel() != null) {
         state.jumpToLabel(choice.getTargetLabel());
         processCurrentNode();
@@ -163,6 +167,42 @@ public class VnScene implements Scene {
         processCurrentNode();
       }
     }
+  }
+
+  private boolean evalChoiceCondition(String cond) {
+    String[] toks = cond.trim().split("\\s+");
+    if (toks.length < 3) return true;
+    String var = toks[0];
+    String op = toks[1];
+    String rhsRaw = toks[2];
+    Object lhs = state.getVariable(var);
+    Object rhs = parseScalar(rhsRaw);
+    if (lhs instanceof Number ln && rhs instanceof Number rn) {
+      double a = ln.doubleValue();
+      double b = rn.doubleValue();
+      if ("==".equals(op)) return a == b;
+      if ("!=".equals(op)) return a != b;
+      if (">".equals(op)) return a > b;
+      if ("<".equals(op)) return a < b;
+      if (">=".equals(op)) return a >= b;
+      if ("<=".equals(op)) return a <= b;
+      return false;
+    }
+    String a = lhs == null ? "" : lhs.toString();
+    String b = rhs == null ? "" : rhs.toString();
+    if ("==".equals(op)) return a.equals(b);
+    if ("!=".equals(op)) return !a.equals(b);
+    return false;
+  }
+
+  private static Object parseScalar(String s) {
+    if (s == null) return "";
+    String t = s.trim();
+    if (t.equalsIgnoreCase("true")) return Boolean.TRUE;
+    if (t.equalsIgnoreCase("false")) return Boolean.FALSE;
+    try { if (t.contains(".")) return Double.parseDouble(t); else return Integer.parseInt(t); }
+    catch (Exception ignored) {}
+    return t;
   }
 
   private void processCurrentNode() {
@@ -270,14 +310,17 @@ public class VnScene implements Scene {
 
   private void processExternalNode(VnNode node) {
     VnExternalCommand cmd = node.getExternalCommand();
+    VnInteropResult res = null;
     if (cmd != null && interop != null) {
       try {
-        interop.handle(cmd, this);
+        res = interop.handle(cmd, this);
       } catch (Exception ignored) {
         // keep VN progressing even if interop fails
       }
     }
-    state.advance();
+    if (res == null || res.shouldAdvance()) {
+      state.advance();
+    }
     processCurrentNode();
   }
 

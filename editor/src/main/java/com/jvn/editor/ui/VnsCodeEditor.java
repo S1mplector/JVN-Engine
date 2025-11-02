@@ -1,6 +1,8 @@
 package com.jvn.editor.ui;
 
 import javafx.scene.layout.BorderPane;
+import javafx.scene.control.Button;
+import javafx.scene.control.ToolBar;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.LineNumberFactory;
@@ -43,6 +45,25 @@ public class VnsCodeEditor extends BorderPane {
     VirtualizedScrollPane<CodeArea> sp = new VirtualizedScrollPane<>(codeArea);
     setCenter(sp);
 
+    Button bDialogue = new Button("Dialogue");
+    bDialogue.setOnAction(e -> insertSnippet("Speaker: Your line here" + System.lineSeparator()));
+    Button bChoice = new Button("Choice");
+    bChoice.setOnAction(e -> insertSnippet("> Choice text -> targetLabel" + System.lineSeparator()));
+    Button bBackground = new Button("Background");
+    bBackground.setOnAction(e -> insertSnippet("[background bgId]" + System.lineSeparator()));
+    Button bJump = new Button("Jump");
+    bJump.setOnAction(e -> insertSnippet("[jump labelName]" + System.lineSeparator()));
+    Button bSet = new Button("Set Var");
+    bSet.setOnAction(e -> insertSnippet("[set varName value]" + System.lineSeparator()));
+    Button bIf = new Button("If");
+    bIf.setOnAction(e -> insertSnippet("[if varName == value goto labelName]" + System.lineSeparator()));
+    Button bHud = new Button("HUD");
+    bHud.setOnAction(e -> insertSnippet("[call hud Hello]" + System.lineSeparator()));
+    Button bJava = new Button("Java");
+    bJava.setOnAction(e -> insertSnippet("[java com.example.Class#method arg1 arg2]" + System.lineSeparator()));
+    ToolBar bar = new ToolBar(bDialogue, bChoice, bBackground, bJump, bSet, bIf, bHud, bJava);
+    setTop(bar);
+
     var css = VnsCodeEditor.class.getResource("/com/jvn/editor/editor.css");
     if (css != null) {
       getStylesheets().add(css.toExternalForm());
@@ -52,6 +73,11 @@ public class VnsCodeEditor extends BorderPane {
 
   public String getText() { return codeArea.getText(); }
   public void setText(String s) { codeArea.replaceText(s == null ? "" : s); }
+
+  private void insertSnippet(String s) {
+    int pos = codeArea.getCaretPosition();
+    codeArea.insertText(pos, s);
+  }
 
   private void applyHighlighting(String text) {
     codeArea.setStyleSpans(0, computeHighlighting(text == null ? "" : text));

@@ -21,6 +21,7 @@ public class VnRenderer {
   private final Font nameFont;
   private final Font dialogueFont;
   private final Font choiceFont;
+  private VnState currentState;
 
   // UI Layout constants
   private static final double TEXTBOX_HEIGHT_RATIO = 0.25;
@@ -31,6 +32,8 @@ public class VnRenderer {
   private static final Color TEXT_COLOR = Color.WHITE;
   private static final Color CHOICE_BG_COLOR = Color.rgb(50, 50, 70, 0.9);
   private static final Color CHOICE_HOVER_COLOR = Color.rgb(70, 70, 100, 0.9);
+  private static final Color CHOICE_DISABLED_COLOR = Color.rgb(60, 60, 60, 0.6);
+  private static final Color TEXT_COLOR_DISABLED = Color.color(1, 1, 1, 0.5);
 
   public VnRenderer(GraphicsContext gc) {
     this.gc = gc;
@@ -90,6 +93,7 @@ public class VnRenderer {
    * Render the complete VN scene
    */
   public void render(VnState state, VnScenario scenario, double width, double height) {
+    this.currentState = state;
     // Clear screen
     gc.setFill(Color.BLACK);
     gc.fillRect(0, 0, width, height);
@@ -134,6 +138,8 @@ public class VnRenderer {
           break;
         case JUMP:
           break;
+        case EXTERNAL:
+          break;
         case END:
           renderEnd(width, height);
           break;
@@ -167,6 +173,7 @@ public class VnRenderer {
    * Render with mouse hover support for choices
    */
   public void render(VnState state, VnScenario scenario, double width, double height, double mouseX, double mouseY) {
+    this.currentState = state;
     render(state, scenario, width, height);
     
     // Re-render choices with hover effect (if UI not hidden)
@@ -293,9 +300,10 @@ public class VnRenderer {
     for (int i = 0; i < choices.size(); i++) {
       Choice choice = choices.get(i);
       double y = startY + i * (choiceHeight + 10);
-
+      boolean enabled = choice.isEnabled() && choiceConditionSatisfied(choice);
+      Color bg = !enabled ? CHOICE_DISABLED_COLOR : (i == hoverIndex ? CHOICE_HOVER_COLOR : CHOICE_BG_COLOR);
       // Background
-      gc.setFill(i == hoverIndex ? CHOICE_HOVER_COLOR : CHOICE_BG_COLOR);
+      gc.setFill(bg);
       gc.fillRoundRect(choiceX, y, choiceWidth, choiceHeight, 10, 10);
 
       // Border
@@ -304,10 +312,52 @@ public class VnRenderer {
       gc.strokeRoundRect(choiceX, y, choiceWidth, choiceHeight, 10, 10);
 
       // Text
-      gc.setFill(TEXT_COLOR);
+      gc.setFill(enabled ? TEXT_COLOR : TEXT_COLOR_DISABLED);
       gc.setFont(choiceFont);
       gc.fillText(choice.getText(), choiceX + 20, y + choiceHeight / 2 + 5);
     }
+  }
+
+  private boolean choiceConditionSatisfied(Choice c) {
+    String cond = c.getCondition();
+    if (cond == null || cond.isEmpty()) return true;
+    String[] toks = cond.trim().split("\\s+");
+    if (toks.length < 3) return true;
+    Object lhs = null;
+    if (toks.length >= 1) lhs = getVariableSafe(toks[0]);
+    String op = toks.length >= 2 ? toks[1] : "==";
+    String rhsRaw = toks.length >= 3 ? toks[2] : "";
+    Object rhs = parseScalar(rhsRaw);
+    if (lhs instanceof Number ln && rhs instanceof Number rn) {
+      double a = ln.doubleValue();
+      double b = rn.doubleValue();
+      if ("==".equals(op)) return a == b;
+      if ("!=".equals(op)) return a != b;
+      if (">".equals(op)) return a > b;
+      if ("<".equals(op)) return a < b;
+      if (">=".equals(op)) return a >= b;
+      if ("<=".equals(op)) return a <= b;
+      return false;
+    }
+    String a = lhs == null ? "" : lhs.toString();
+    String b = rhs == null ? "" : rhs.toString();
+    if ("==".equals(op)) return a.equals(b);
+    if ("!=".equals(op)) return !a.equals(b);
+    return false;
+  }
+
+  private Object getVariableSafe(String key) {
+    return key == null ? null : currentState != null ? currentState.getVariables().get(key) : null;
+  }
+
+  private static Object parseScalar(String s) {
+    if (s == null) return "";
+    String t = s.trim();
+    if (t.equalsIgnoreCase("true")) return Boolean.TRUE;
+    if (t.equalsIgnoreCase("false")) return Boolean.FALSE;
+    try { if (t.contains(".")) return Double.parseDouble(t); else return Integer.parseInt(t); }
+    catch (Exception ignored) {}
+    return t;
   }
 
   private void renderEnd(double width, double height) {

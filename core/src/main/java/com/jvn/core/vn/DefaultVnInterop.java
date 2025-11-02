@@ -15,24 +15,30 @@ import java.util.List;
  */
 public class DefaultVnInterop implements VnInterop {
   @Override
-  public void handle(VnExternalCommand command, VnScene scene) {
-    if (command == null || scene == null) return;
+  public VnInteropResult handle(VnExternalCommand command, VnScene scene) {
+    if (command == null || scene == null) return VnInteropResult.advance();
     String provider = safe(command.getProvider()).toLowerCase();
     String payload = safe(command.getPayload());
 
     switch (provider) {
       case "hud":
         scene.getState().showHudMessage(payload, 2000);
-        break;
+        return VnInteropResult.advance();
       case "java":
         handleJava(payload, scene);
-        break;
+        return VnInteropResult.advance();
       case "jes":
         scene.getState().showHudMessage("[jes] " + payload, 1500);
-        break;
+        return VnInteropResult.advance();
+      case "var":
+        handleVar(payload, scene);
+        return VnInteropResult.advance();
+      case "cond":
+        boolean jumped = handleCond(payload, scene);
+        return jumped ? VnInteropResult.stay() : VnInteropResult.advance();
       default:
         scene.getState().showHudMessage("[call " + provider + "] " + payload, 1200);
-        break;
+        return VnInteropResult.advance();
     }
   }
 
@@ -62,6 +68,90 @@ public class DefaultVnInterop implements VnInterop {
     } catch (Throwable t) {
       scene.getState().showHudMessage("java: " + t.getClass().getSimpleName(), 2000);
     }
+  }
+
+  private void handleVar(String payload, VnScene scene) {
+    String[] parts = (payload == null ? "" : payload.trim()).split("\\s+", 3);
+    if (parts.length == 0) return;
+    String op = parts[0].toLowerCase();
+    String key = parts.length >= 2 ? parts[1] : "";
+    String val = parts.length >= 3 ? parts[2] : "";
+    var vars = scene.getState().getVariables();
+    switch (op) {
+      case "set":
+        vars.put(key, parseScalar(val));
+        break;
+      case "inc":
+        numberOp(vars, key, val, true);
+        break;
+      case "dec":
+        numberOp(vars, key, val, false);
+        break;
+      case "flag":
+        vars.put(key, Boolean.TRUE);
+        break;
+      case "unflag":
+        vars.put(key, Boolean.FALSE);
+        break;
+      case "clear":
+        vars.remove(key);
+        break;
+    }
+  }
+
+  private void numberOp(java.util.Map<String,Object> vars, String key, String deltaStr, boolean inc) {
+    Object cur = vars.get(key);
+    double curVal = 0.0;
+    if (cur instanceof Number n) curVal = n.doubleValue();
+    else if (cur instanceof String s) try { curVal = Double.parseDouble(s); } catch (Exception ignored) {}
+    double delta = 1.0;
+    try { delta = Double.parseDouble(deltaStr); } catch (Exception ignored) {}
+    double res = inc ? curVal + delta : curVal - delta;
+    if (isWhole(res)) vars.put(key, (int)Math.round(res)); else vars.put(key, res);
+  }
+
+  private boolean isWhole(double d) { return Math.abs(d - Math.rint(d)) < 1e-9; }
+
+  private boolean handleCond(String payload, VnScene scene) {
+    if (payload == null) return false;
+    String[] toks = payload.trim().split("\\s+");
+    if (toks.length < 5) return false;
+    int i = 0;
+    String kw = toks[i++].toLowerCase();
+    if (!"if".equals(kw)) return false;
+    String var = toks[i++];
+    String op = toks[i++];
+    String value = toks[i++];
+    String gotoKw = toks[i++].toLowerCase();
+    if (!"goto".equals(gotoKw)) return false;
+    String label = toks.length > i ? toks[i] : null;
+    Object lhs = scene.getState().getVariable(var);
+    boolean ok = compare(lhs, op, value);
+    if (ok && label != null) {
+      scene.getState().jumpToLabel(label);
+      return true;
+    }
+    return false;
+  }
+
+  private boolean compare(Object lhs, String op, String rhsRaw) {
+    Object rhs = parseScalar(rhsRaw);
+    if (lhs instanceof Number ln && rhs instanceof Number rn) {
+      double a = ln.doubleValue();
+      double b = rn.doubleValue();
+      if ("==".equals(op)) return a == b;
+      if ("!=".equals(op)) return a != b;
+      if (">".equals(op)) return a > b;
+      if ("<".equals(op)) return a < b;
+      if (">=".equals(op)) return a >= b;
+      if ("<=".equals(op)) return a <= b;
+      return false;
+    }
+    String a = lhs == null ? "" : lhs.toString();
+    String b = rhs == null ? "" : rhs.toString();
+    if ("==".equals(op)) return a.equals(b);
+    if ("!=".equals(op)) return !a.equals(b);
+    return false;
   }
 
   private static Method findStaticMethod(Class<?> cls, String name, int arity) {
