@@ -19,6 +19,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ScrollPane;
 import javafx.stage.FileChooser;
+import javafx.scene.input.ScrollEvent;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -92,6 +93,7 @@ public class StoryTimelineView extends BorderPane {
   private final ListView<Link> links = new ListView<>();
   private final StoryGraphPane graph = new StoryGraphPane();
   private final ScrollPane graphScroll = new ScrollPane(graph);
+  private Slider zoomSlider;
   private File projectRoot;
   private Consumer<Arc> onRunArc;
   private Consumer<Link> onRunLink;
@@ -116,6 +118,7 @@ public class StoryTimelineView extends BorderPane {
     lists.getItems().addAll(new TitledPane("Arcs", arcs), new TitledPane("Links", links));
     lists.setDividerPositions(0.5);
     graphScroll.setFitToWidth(true); graphScroll.setFitToHeight(true);
+    graphScroll.setPannable(true);
     SplitPane rootSplit = new SplitPane();
     rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
     rootSplit.getItems().addAll(graphScroll, lists);
@@ -147,11 +150,11 @@ public class StoryTimelineView extends BorderPane {
     TextField tfSearch = new TextField(); tfSearch.setPromptText("Search arcs...");
     tfSearch.textProperty().addListener((o, ov, nv) -> graph.highlight(nv));
     Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
-    Slider zoom = new Slider(0.6, 2.0, 1.0); zoom.setPrefWidth(120);
-    zoom.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
+    zoomSlider = new Slider(0.6, 2.0, 1.0); zoomSlider.setPrefWidth(120);
+    zoomSlider.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
     FlowPane actions = new FlowPane(6, 6);
     actions.setPadding(new Insets(6));
-    actions.getChildren().addAll(bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoom, tfSearch, bAuto, bSave, bLoad, bValidate);
+    actions.getChildren().addAll(bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoomSlider, tfSearch, bAuto, bSave, bLoad, bValidate);
     // Wrap to new rows instead of squeezing buttons to tiny squares
     actions.prefWrapLengthProperty().bind(widthProperty().subtract(24));
     setTop(actions);
@@ -161,6 +164,17 @@ public class StoryTimelineView extends BorderPane {
     graph.setOnRunLink(l -> { if (onRunLink != null) onRunLink.accept(l); });
     arcs.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) -> {
       if (nv != null) graph.highlight(nv.name);
+    });
+
+    // Wheel zoom with Ctrl/Cmd
+    graphScroll.addEventFilter(ScrollEvent.SCROLL, e -> {
+      if (e.isControlDown() || e.isShortcutDown()) {
+        double v = zoomSlider.getValue();
+        double step = (e.getDeltaY() > 0) ? 0.1 : -0.1;
+        v = Math.max(zoomSlider.getMin(), Math.min(zoomSlider.getMax(), v + step));
+        zoomSlider.setValue(v);
+        e.consume();
+      }
     });
   }
 

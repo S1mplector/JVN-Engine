@@ -486,6 +486,7 @@ public class EditorApp extends Application {
     if (projView != null) projView.setRootDirectory(dir);
     if (timelineView != null) timelineView.setProjectRoot(dir);
     if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
+    applyProjectRootToTabs();
     status.setText("Project: " + dir.getName());
   }
 
@@ -578,6 +579,7 @@ public class EditorApp extends Application {
     }
     // Create new tab
     FileEditorTab editor = new FileEditorTab(f);
+    if (projectRoot != null) editor.setProjectRoot(projectRoot);
     editor.setOnSelected(ent -> { selected = ent; inspectorView.setSelection(ent); });
     editor.setOnStatus(s -> status.setText(s));
     editor.setCommandStack(commands);
@@ -590,6 +592,15 @@ public class EditorApp extends Application {
     lastOpened = f;
     status.setText("Loaded: " + f.getName());
     updateContextForActiveTab();
+  }
+
+  private void applyProjectRootToTabs() {
+    if (filesTabs == null) return;
+    for (Tab t : filesTabs.getTabs()) {
+      if (t.getContent() instanceof com.jvn.editor.ui.FileEditorTab fet) {
+        fet.setProjectRoot(projectRoot);
+      }
+    }
   }
 
   private FileEditorTab getActiveFileTab() {

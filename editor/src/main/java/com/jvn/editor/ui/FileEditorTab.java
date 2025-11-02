@@ -36,6 +36,7 @@ public class FileEditorTab extends BorderPane {
   private Consumer<Entity2D> onSelected;
   private Consumer<String> onStatus;
   private com.jvn.editor.commands.CommandStack commands;
+  private File projectRoot;
 
   public FileEditorTab(File file) {
     this.file = file;
@@ -107,6 +108,11 @@ public class FileEditorTab extends BorderPane {
 
   public void setOnSelected(Consumer<Entity2D> c) { this.onSelected = c; }
   public void setOnStatus(Consumer<String> c) { this.onStatus = c; }
+  public void setProjectRoot(File root) {
+    this.projectRoot = root;
+    if (jesEditor != null) jesEditor.setProjectRoot(root);
+    if (vnsEditor != null) vnsEditor.setProjectRoot(root);
+  }
 
   public void setCommandStack(com.jvn.editor.commands.CommandStack cs) {
     this.commands = cs;

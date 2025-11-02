@@ -11,9 +11,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.List;
+import java.io.File;
 
 public class JesCodeEditor extends BorderPane {
   private final CodeArea codeArea = new CodeArea();
+  private CodeAutoCompleter completer;
+  private File projectRoot;
 
   private static final String[] KEYWORDS = new String[] {
     "scene","entity","component","on","key","do","timeline",
@@ -52,10 +57,13 @@ public class JesCodeEditor extends BorderPane {
       getStylesheets().add(css.toExternalForm());
       codeArea.getStylesheets().add(css.toExternalForm());
     }
+
+    completer = new CodeAutoCompleter(codeArea, ctx -> provideSuggestions(ctx));
   }
 
   public String getText() { return codeArea.getText(); }
   public void setText(String s) { codeArea.replaceText(s == null ? "" : s); }
+  public void setProjectRoot(File root) { this.projectRoot = root; if (completer != null) completer.setProjectRoot(root); }
 
   private void applyHighlighting(String text) {
     codeArea.setStyleSpans(0, computeHighlighting(text == null ? "" : text));
@@ -80,5 +88,39 @@ public class JesCodeEditor extends BorderPane {
     }
     spansBuilder.add(Collections.emptyList(), text.length() - lastKwEnd);
     return spansBuilder.create();
+  }
+
+  private List<CodeAutoCompleter.Suggestion> provideSuggestions(CodeAutoCompleter.Context ctx) {
+    String p = ctx.prefix == null ? "" : ctx.prefix;
+    String pl = p.toLowerCase();
+    List<CodeAutoCompleter.Suggestion> out = new ArrayList<>();
+    // keywords
+    for (String kw : KEYWORDS) if (kw.startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(kw));
+    // if inside quotes and line hints an image value, suggest asset ids
+    String line = currentLine(ctx.text, ctx.caret).toLowerCase();
+    boolean wantsImage = line.contains("image") || line.contains("texture");
+    if (wantsImage) {
+      for (String dir : List.of("assets/ui", "assets/backgrounds", "assets/cg", "assets/characters")) {
+        for (String id : CodeAutoCompleter.listAssetIds(projectRoot, dir, ".png", ".jpg", ".jpeg", ".webp")) {
+          String nm = id.contains("/") ? id.substring(id.lastIndexOf('/')+1) : id;
+          if (nm.toLowerCase().startsWith(pl) || id.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(id));
+        }
+      }
+    }
+    // de-dup
+    if (out.size() > 1) {
+      List<String> seen = new ArrayList<>();
+      out.removeIf(sug -> { String k = sug.insert; if (seen.contains(k)) return true; seen.add(k); return false; });
+    }
+    return out;
+  }
+
+  private static String currentLine(String text, int caret) {
+    if (text == null) return "";
+    int s = text.lastIndexOf('\n', Math.max(0, caret-1));
+    int e = text.indexOf('\n', caret);
+    if (s < 0) s = 0; else s = s + 1;
+    if (e < 0) e = text.length();
+    return text.substring(s, Math.min(e, text.length()));
   }
 }

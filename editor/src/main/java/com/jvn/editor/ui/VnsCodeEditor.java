@@ -13,9 +13,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class VnsCodeEditor extends BorderPane {
   private final CodeArea codeArea = new CodeArea();
+  private CodeAutoCompleter completer;
+  private File projectRoot;
 
   private static final String DIRECTIVE_PATTERN = "@(?:scenario|character|background|label)\b";
   private static final String BRACKET_PATTERN = "\\[[^\\]]+\\]";
@@ -79,10 +84,13 @@ public class VnsCodeEditor extends BorderPane {
       getStylesheets().add(css.toExternalForm());
       codeArea.getStylesheets().add(css.toExternalForm());
     }
+
+    completer = new CodeAutoCompleter(codeArea, ctx -> provideSuggestions(ctx));
   }
 
   public String getText() { return codeArea.getText(); }
   public void setText(String s) { codeArea.replaceText(s == null ? "" : s); }
+  public void setProjectRoot(File root) { this.projectRoot = root; if (completer != null) completer.setProjectRoot(root); }
 
   private void insertSnippet(String s) {
     int pos = codeArea.getCaretPosition();
@@ -114,5 +122,56 @@ public class VnsCodeEditor extends BorderPane {
     }
     spansBuilder.add(Collections.emptyList(), text.length() - lastKwEnd);
     return spansBuilder.create();
+  }
+
+  private List<CodeAutoCompleter.Suggestion> provideSuggestions(CodeAutoCompleter.Context ctx) {
+    String p = ctx.prefix == null ? "" : ctx.prefix;
+    String pl = p.toLowerCase();
+    List<CodeAutoCompleter.Suggestion> out = new ArrayList<>();
+    if (pl.startsWith("@")) {
+      out.add(new CodeAutoCompleter.Suggestion("@scenario "));
+      out.add(new CodeAutoCompleter.Suggestion("@character "));
+      out.add(new CodeAutoCompleter.Suggestion("@background "));
+      out.add(new CodeAutoCompleter.Suggestion("@label "));
+    }
+    if (pl.startsWith("[")) {
+      out.add(new CodeAutoCompleter.Suggestion("[background "));
+      out.add(new CodeAutoCompleter.Suggestion("[jump "));
+      out.add(new CodeAutoCompleter.Suggestion("[set "));
+      out.add(new CodeAutoCompleter.Suggestion("[if "));
+      out.add(new CodeAutoCompleter.Suggestion("[call hud "));
+      out.add(new CodeAutoCompleter.Suggestion("[java "));
+      out.add(new CodeAutoCompleter.Suggestion("[mainmenu "));
+      out.add(new CodeAutoCompleter.Suggestion("[load "));
+      out.add(new CodeAutoCompleter.Suggestion("[goto "));
+      out.add(new CodeAutoCompleter.Suggestion("[jes call "));
+    }
+    // Labels from current document
+    for (String lab : extractLabels(ctx.text)) {
+      if (lab.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(lab));
+    }
+    // Asset IDs for backgrounds
+    for (String id : CodeAutoCompleter.listAssetIds(projectRoot, "assets/backgrounds", ".png", ".jpg", ".jpeg", ".webp")) {
+      String nm = id.contains("/") ? id.substring(id.lastIndexOf('/')+1) : id;
+      if (nm.toLowerCase().startsWith(pl) || id.toLowerCase().startsWith(pl)) {
+        out.add(new CodeAutoCompleter.Suggestion(id));
+      }
+    }
+    // Make unique
+    if (out.size() > 1) {
+      List<String> seen = new ArrayList<>();
+      out.removeIf(sug -> { String k = sug.insert; if (seen.contains(k)) return true; seen.add(k); return false; });
+    }
+    return out;
+  }
+
+  private static List<String> extractLabels(String text) {
+    try {
+      List<String> res = new ArrayList<>();
+      if (text == null) return res;
+      java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^@label\\s+(\\S+)").matcher(text);
+      while (m.find()) res.add(m.group(1));
+      return res;
+    } catch (Exception ignore) { return java.util.List.of(); }
   }
 }
