@@ -20,6 +20,10 @@ public class Label2D extends Entity2D {
   public boolean isBold() { return bold; }
   public String getFontFamily() { return fontFamily; }
   public Align getAlign() { return align; }
+  public double getColorR() { return r; }
+  public double getColorG() { return g; }
+  public double getColorB() { return blue; }
+  public double getAlpha() { return a; }
 
   @Override
   public void render(Blitter2D b) {

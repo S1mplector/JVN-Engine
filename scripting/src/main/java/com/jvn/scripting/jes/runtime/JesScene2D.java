@@ -145,7 +145,7 @@ public class JesScene2D extends Scene2DBase {
     Input in = getInput(); if (in == null) return;
     double x = toNum(props.get("x"), in.getMouseX());
     double y = toNum(props.get("y"), in.getMouseY());
-    double r = toNum(props.get("r"), 10) / 100.0; // assume pixels->meters approx
+    double r = toNum(props.get("r"), 10);
     double mass = toNum(props.get("mass"), 1);
     double rest = toNum(props.get("restitution"), 0.4);
     RigidBody2D body = RigidBody2D.circle(x, y, r);
@@ -159,8 +159,8 @@ public class JesScene2D extends Scene2DBase {
     Input in = getInput(); if (in == null) return;
     double x = toNum(props.get("x"), in.getMouseX());
     double y = toNum(props.get("y"), in.getMouseY());
-    double w = toNum(props.get("w"), 40) / 100.0;
-    double h = toNum(props.get("h"), 40) / 100.0;
+    double w = toNum(props.get("w"), 40);
+    double h = toNum(props.get("h"), 40);
     double mass = toNum(props.get("mass"), 1);
     double rest = toNum(props.get("restitution"), 0.2);
     RigidBody2D body = RigidBody2D.box(x, y, w, h);

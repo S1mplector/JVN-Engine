@@ -105,6 +105,9 @@ public class JesLoader {
             body.setRestitution(restitution);
             body.setStatic(stat);
             body.setSensor(sensor);
+            double vx = num(c, "vx", 0);
+            double vy = num(c, "vy", 0);
+            body.setVelocity(vx, vy);
             scene.getWorld().addBody(body);
             PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
             Object fill = c.props.get("color");

@@ -11,6 +11,10 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -20,6 +24,7 @@ import javafx.animation.AnimationTimer;
 import java.io.InputStream;
 import java.io.FileInputStream;
 import java.io.File;
+import javafx.scene.paint.Color;
 
 import com.jvn.scripting.jes.JesLoader;
 import com.jvn.scripting.jes.runtime.JesScene2D;
@@ -44,6 +49,8 @@ public class EditorApp extends Application {
   private File lastOpened;
   private Entity2D selected;
   private VBox inspector;
+  private VBox sceneGraph;
+  private ListView<String> sceneList;
   private Input input = new Input();
 
   public static void main(String[] args) {
@@ -96,6 +103,10 @@ public class EditorApp extends Application {
     inspector.setMinWidth(280);
     inspector.setPrefWidth(320);
     root.setRight(inspector);
+    sceneGraph = new VBox(8);
+    sceneGraph.setMinWidth(200);
+    sceneGraph.setPrefWidth(240);
+    root.setLeft(sceneGraph);
 
     Scene scene = new Scene(root, 1200, 800);
     primaryStage.setScene(scene);
@@ -136,6 +147,7 @@ public class EditorApp extends Application {
       if (current != null) current.setInput(input);
       selected = null;
       buildInspector();
+      buildSceneGraph();
     } catch (Exception ex) {
       status.setText("Load failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
@@ -151,6 +163,7 @@ public class EditorApp extends Application {
       if (current != null) current.setInput(input);
       selected = null;
       buildInspector();
+      buildSceneGraph();
     } catch (Exception ex) {
       status.setText("Reload failed");
     }
@@ -235,7 +248,55 @@ public class EditorApp extends Application {
         var rest = makeNumberField("restitution", body.getRestitution(), v -> body.setRestitution(v));
         inspector.getChildren().addAll(mass, rest);
       }
+    } else if (selected instanceof Label2D lbl) {
+      HBox rowText = new HBox(6);
+      Label ltext = new Label("text");
+      TextField tf = new TextField(lbl.getText() == null ? "" : lbl.getText());
+      tf.setOnAction(e -> { lbl.setText(tf.getText()); status.setText("Updated text"); });
+      tf.setOnKeyReleased(e -> { if (e.getCode().toString().equals("ENTER")) { lbl.setText(tf.getText()); status.setText("Updated text"); } });
+      rowText.getChildren().addAll(ltext, tf);
+
+      var size = makeNumberField("size", lbl.getSize(), v -> { lbl.setFont(lbl.getFontFamily(), v, lbl.isBold()); });
+
+      CheckBox cbBold = new CheckBox("bold");
+      cbBold.setSelected(lbl.isBold());
+      cbBold.setOnAction(e -> { lbl.setFont(lbl.getFontFamily(), lbl.getSize(), cbBold.isSelected()); });
+
+      HBox rowAlign = new HBox(6);
+      Label lAlign = new Label("align");
+      ComboBox<Label2D.Align> cbAlign = new ComboBox<>();
+      cbAlign.getItems().addAll(Label2D.Align.values());
+      cbAlign.getSelectionModel().select(lbl.getAlign());
+      cbAlign.setOnAction(e -> { lbl.setAlign(cbAlign.getValue()); });
+      rowAlign.getChildren().addAll(lAlign, cbAlign);
+
+      HBox rowColor = new HBox(6);
+      Label lColor = new Label("color");
+      ColorPicker cp = new ColorPicker(new Color(lbl.getColorR(), lbl.getColorG(), lbl.getColorB(), lbl.getAlpha()));
+      cp.setOnAction(e -> { Color c = cp.getValue(); lbl.setColor(c.getRed(), c.getGreen(), c.getBlue(), c.getOpacity()); });
+      rowColor.getChildren().addAll(lColor, cp);
+
+      var alpha = makeNumberField("alpha", lbl.getAlpha(), v -> { lbl.setColor(lbl.getColorR(), lbl.getColorG(), lbl.getColorB(), v); });
+
+      inspector.getChildren().addAll(rowText, size, cbBold, rowAlign, rowColor, alpha);
     }
+  }
+
+  private void buildSceneGraph() {
+    if (sceneGraph == null) return;
+    sceneGraph.getChildren().clear();
+    if (current == null) { sceneGraph.getChildren().add(new Label("No scene")); return; }
+    sceneGraph.getChildren().add(new Label("Scene Graph"));
+    sceneList = new ListView<>();
+    var items = javafx.collections.FXCollections.<String>observableArrayList();
+    var sorted = new java.util.TreeSet<String>(current.names());
+    items.addAll(sorted);
+    sceneList.setItems(items);
+    sceneList.setOnMouseClicked(e -> {
+      String name = sceneList.getSelectionModel().getSelectedItem();
+      if (name != null) { selected = current.find(name); buildInspector(); }
+    });
+    sceneGraph.getChildren().add(sceneList);
   }
 
   private HBox makeNumberField(String label, double initial, java.util.function.DoubleConsumer onChange) {
