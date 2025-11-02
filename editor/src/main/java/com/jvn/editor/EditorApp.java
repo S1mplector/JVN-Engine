@@ -1,29 +1,18 @@
 package com.jvn.editor;
 
-import java.io.InputStream;
-import java.io.FileInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.FileOutputStream;
-import java.nio.file.Files;
 import java.util.Properties;
 
 import com.jvn.core.scene2d.Entity2D;
-import com.jvn.core.vn.VnScenario;
-import com.jvn.core.vn.script.VnScriptParser;
 import com.jvn.editor.commands.CommandStack;
 import com.jvn.editor.ui.InspectorView;
-import com.jvn.editor.ui.JesCodeEditor;
-import com.jvn.editor.ui.JavaCodeEditor;
-import com.jvn.editor.ui.VnsCodeEditor;
-import com.jvn.editor.ui.VnPreviewView;
+import com.jvn.editor.ui.FileEditorTab;
 import com.jvn.editor.ui.ProjectExplorerView;
 import com.jvn.editor.ui.SceneGraphView;
-import com.jvn.editor.ui.ViewportView;
-import com.jvn.scripting.jes.JesExporter;
-import com.jvn.scripting.jes.JesLoader;
 import com.jvn.scripting.jes.runtime.JesScene2D;
-
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -41,7 +30,6 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -52,24 +40,12 @@ import javafx.stage.Stage;
 
 public class EditorApp extends Application {
   // UI
-  private ViewportView viewport;
-  private JesScene2D current;
   private AnimationTimer timer;
   private Label status;
   private File lastOpened;
   private Entity2D selected;
   private InspectorView inspectorView;
-  // Input is owned by ViewportView
-  private TabPane tabs;
-  private JesCodeEditor codeView;
-  private JavaCodeEditor javaCodeView;
-  private VnsCodeEditor vnsCodeView;
-  private VnPreviewView vnView;
-  private Tab tabCanvas;
-  private Tab tabCode;
-  private Tab tabJava;
-  private Tab tabVnsCode;
-  private Tab tabVnPreview;
+  private TabPane filesTabs;
   private boolean showGrid = true;
   
   private SceneGraphView sgView;
@@ -225,39 +201,16 @@ public class EditorApp extends Application {
   }
 
   private void openSample(String absolutePath) {
-    try {
-      File f = new File(absolutePath);
-      if (!f.exists()) {
-        Alert a = new Alert(Alert.AlertType.ERROR, "Sample not found: " + absolutePath);
-        a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
-        return;
-      }
-      try (InputStream in = new FileInputStream(f)) {
-        current = JesLoader.load(in);
-      }
-      lastOpened = f;
-      status.setText("Loaded: " + f.getName());
-      if (current != null) { current.setInput(viewport.getInput()); current.setCamera(viewport.getCamera()); viewport.setScene(current); }
-      try { String code = Files.readString(f.toPath()); codeView.setText(code); } catch (Exception ignore) {}
-      selected = null;
-      inspectorView.setScene(current);
-      inspectorView.setSelection(null);
-      buildSceneGraph();
-      tabs.getSelectionModel().selectFirst();
-    } catch (Exception ex) {
-      status.setText("Load failed");
-      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
+    File f = new File(absolutePath);
+    if (!f.exists()) {
+      Alert a = new Alert(Alert.AlertType.ERROR, "Sample not found: " + absolutePath);
       a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+      return;
     }
+    openFile(f);
   }
 
-  private void fitCameraToEntity(Entity2D e) { if (viewport != null) viewport.fitToEntity(e); }
-
-  private void resetCamera() { if (viewport != null) { viewport.getCamera().setPosition(0,0); viewport.getCamera().setZoom(1.0); } }
-
-  private void fitCameraToContent() { if (viewport != null) viewport.fitToContent(); }
-
-  // legacy helpers removed; ViewportView now owns camera, render, pick
+  // legacy helpers removed; ViewportView now owned by per-file tabs
 
   @Override
   public void start(Stage primaryStage) {
@@ -301,10 +254,9 @@ public class EditorApp extends Application {
     miReset.setOnAction(e -> resetCamera());
     miReset.setAccelerator(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.SHORTCUT_DOWN));
     MenuItem miToggleGrid = new MenuItem("Toggle Grid");
-    miToggleGrid.setOnAction(e -> { showGrid = !showGrid; });
+    miToggleGrid.setOnAction(e -> { showGrid = !showGrid; FileEditorTab ft = getActiveFileTab(); if (ft != null) ft.setShowGrid(showGrid); });
     miToggleGrid.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.SHORTCUT_DOWN));
     menuView.getItems().addAll(miFit, miReset, miToggleGrid);
-    miToggleGrid.setOnAction(e -> { showGrid = !showGrid; if (viewport != null) viewport.setShowGrid(showGrid); });
 
     Menu menuSamples = new Menu("Samples");
     Menu menuProject = new Menu("Project");
@@ -355,30 +307,17 @@ public class EditorApp extends Application {
     Region logo = icon("jvn-logo");
     toolbar.getChildren().addAll(logo, btnOpen, btnReload, btnApply, btnFit, btnReset, status);
 
-    // Viewport component
-    viewport = new ViewportView();
-    viewport.setOnSelected(ent -> { selected = ent; inspectorView.setSelection(ent); });
-    viewport.setOnStatus(s -> status.setText(s));
-    viewport.setCommandStack(commands);
-
     // Layout
     BorderPane top = new BorderPane();
     top.setTop(mb);
     top.setCenter(toolbar);
     root.setTop(top);
-    // Center: TabPane with Canvas and Code editors
-    codeView = new JesCodeEditor();
-    javaCodeView = new JavaCodeEditor();
-    vnsCodeView = new VnsCodeEditor();
-    vnView = new VnPreviewView();
-    tabs = new TabPane();
-    tabCanvas = new Tab("Canvas", viewport); tabCanvas.setClosable(false);
-    tabCode = new Tab("JES Code", codeView); tabCode.setClosable(false);
-    tabJava = new Tab("Java Code", javaCodeView); tabJava.setClosable(false);
-    tabVnsCode = new Tab("VNS Code", vnsCodeView); tabVnsCode.setClosable(false);
-    tabVnPreview = new Tab("VN Preview", vnView); tabVnPreview.setClosable(false);
-    tabs.getTabs().addAll(tabCanvas, tabCode, tabJava, tabVnsCode, tabVnPreview);
-    root.setCenter(tabs);
+    // Center: per-file tabs with embedded preview
+    filesTabs = new TabPane();
+    filesTabs.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) -> {
+      updateContextForActiveTab();
+    });
+    root.setCenter(filesTabs);
     inspectorView = new InspectorView(s -> status.setText(s));
     inspectorView.setCommandStack(commands);
     inspectorView.setMinWidth(280);
@@ -393,12 +332,8 @@ public class EditorApp extends Application {
     projView.setOnOpenFile(f -> {
       if (f == null) return;
       String name = f.getName().toLowerCase();
-      if (name.endsWith(".jes") || name.endsWith(".txt")) {
-        openJesFile(f);
-      } else if (name.endsWith(".vns")) {
-        openVnsFile(f);
-      } else if (name.endsWith(".java")) {
-        openJavaFile(f);
+      if (name.endsWith(".jes") || name.endsWith(".txt") || name.endsWith(".vns") || name.endsWith(".java")) {
+        openFile(f);
       } else {
         try { java.awt.Desktop.getDesktop().open(f); } catch (Exception ignored) {}
       }
@@ -418,13 +353,6 @@ public class EditorApp extends Application {
     } catch (Exception ignore) {}
     primaryStage.setScene(scene);
     primaryStage.show();
-    viewport.setFocusTraversable(true);
-    scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> { if (tabs.getSelectionModel().getSelectedItem() == tabCanvas) viewport.getInput().keyDown(mapKey(e.getCode())); });
-    scene.addEventFilter(KeyEvent.KEY_RELEASED, e -> { if (tabs.getSelectionModel().getSelectedItem() == tabCanvas) viewport.getInput().keyUp(mapKey(e.getCode())); });
-
-    // Resize handling
-    scene.widthProperty().addListener((o,ov,nv) -> { viewport.setSize(nv.doubleValue(), viewport.getHeight()); if (vnView != null) vnView.setSize(nv.doubleValue(), vnView.getHeight()); });
-    scene.heightProperty().addListener((o,ov,nv) -> { viewport.setSize(viewport.getWidth(), nv.doubleValue() - 60); if (vnView != null) vnView.setSize(vnView.getWidth(), nv.doubleValue() - 60); });
 
     // Timer
     timer = new AnimationTimer() {
@@ -433,8 +361,11 @@ public class EditorApp extends Application {
         if (last < 0) { last = now; return; }
         long dt = (now - last) / 1_000_000L;
         last = now;
-        viewport.render(dt);
-        if (vnView != null) vnView.render(dt);
+        FileEditorTab ft = getActiveFileTab();
+        if (ft != null) {
+          ft.setSize(filesTabs.getWidth(), filesTabs.getHeight());
+          ft.render(dt);
+        }
       }
     };
     timer.start();
@@ -465,112 +396,24 @@ public class EditorApp extends Application {
     status.setText("Project: " + dir.getName());
   }
 
-  private void openJesFile(File f) {
-    if (f == null) return;
-    try (InputStream in = new FileInputStream(f)) {
-      current = JesLoader.load(in);
-      lastOpened = f;
-      status.setText("Loaded: " + f.getName());
-      if (current != null) current.setInput(viewport.getInput());
-      if (current != null) current.setCamera(viewport.getCamera());
-      viewport.setScene(current);
-      try { String code = Files.readString(f.toPath()); codeView.setText(code); } catch (Exception ignore) {}
-      selected = null;
-      inspectorView.setScene(current);
-      inspectorView.setSelection(null);
-      buildSceneGraph();
-      if (projectRoot == null && f.getParentFile() != null) {
-        File dir = f.getParentFile();
-        for (int i = 0; i < 3 && dir != null; i++) dir = dir.getParentFile();
-        if (dir != null) { projectRoot = dir; if (projView != null) projView.setRootDirectory(projectRoot); }
-      }
-    } catch (Exception ex) {
-      status.setText("Load failed: " + ex.getMessage());
-    }
-  }
+  private void openJesFile(File f) { openFile(f); }
 
-  private void openVnsFile(File f) {
-    if (f == null) return;
-    try {
-      String code = Files.readString(f.toPath());
-      if (vnsCodeView != null) vnsCodeView.setText(code);
-      VnScriptParser parser = new VnScriptParser();
-      VnScenario scenario = parser.parse(new FileInputStream(f));
-      if (vnView != null) vnView.setScenario(scenario);
-      lastOpened = f;
-      status.setText("Loaded: " + f.getName());
-      tabs.getSelectionModel().select(tabVnPreview);
-    } catch (Exception ex) {
-      status.setText("Load failed: " + ex.getMessage());
-    }
-  }
+  private void openVnsFile(File f) { openFile(f); }
 
   private void doReload() {
-    if (lastOpened == null) return;
-    String nm = lastOpened.getName().toLowerCase();
-    if (nm.endsWith(".java")) {
-      try { String code = Files.readString(lastOpened.toPath()); javaCodeView.setText(code); tabs.getSelectionModel().select(tabJava); status.setText("Reloaded: " + lastOpened.getName()); } catch (Exception ex) { status.setText("Reload failed"); }
-      return;
-    }
-    if (nm.endsWith(".vns")) {
-      try {
-        String code = Files.readString(lastOpened.toPath());
-        if (vnsCodeView != null) vnsCodeView.setText(code);
-        VnScriptParser parser = new VnScriptParser();
-        VnScenario scenario = parser.parse(new FileInputStream(lastOpened));
-        if (vnView != null) vnView.setScenario(scenario);
-        status.setText("Reloaded: " + lastOpened.getName());
-        tabs.getSelectionModel().select(tabVnPreview);
-      } catch (Exception ex) {
-        status.setText("Reload failed");
-      }
-      return;
-    }
-    try (InputStream in = new FileInputStream(lastOpened)) {
-      current = JesLoader.load(in);
-      status.setText("Reloaded: " + lastOpened.getName());
-      if (current != null) current.setInput(viewport.getInput());
-      if (current != null) current.setCamera(viewport.getCamera());
-      viewport.setScene(current);
-      try { String code = Files.readString(lastOpened.toPath()); codeView.setText(code); } catch (Exception ignore) {}
-      selected = null;
-      inspectorView.setScene(current);
-      inspectorView.setSelection(null);
-      buildSceneGraph();
-    } catch (Exception ex) {
-      status.setText("Reload failed");
-    }
+    FileEditorTab ft = getActiveFileTab();
+    if (ft == null) return;
+    ft.reloadFromDisk();
+    updateContextForActiveTab();
   }
 
   private void applyCodeFromEditor() {
     try {
-      Tab sel = tabs.getSelectionModel().getSelectedItem();
-      if (sel == tabVnsCode || (lastOpened != null && lastOpened.getName().toLowerCase().endsWith(".vns"))) {
-        String vnsText = vnsCodeView.getText();
-        if (vnsText == null || vnsText.isBlank()) return;
-        VnScriptParser parser = new VnScriptParser();
-        VnScenario scenario = parser.parseFromString(vnsText);
-        if (vnView != null) {
-          vnView.setScenario(scenario);
-          status.setText("Applied VNS code");
-          tabs.getSelectionModel().select(tabVnPreview);
-        }
-      } else {
-        String code = codeView.getText();
-        if (code == null || code.isBlank()) return;
-        current = JesLoader.load(code);
-        if (current != null) {
-          current.setInput(viewport.getInput());
-          current.setCamera(viewport.getCamera());
-          viewport.setScene(current);
-          selected = null;
-          inspectorView.setScene(current);
-          inspectorView.setSelection(null);
-          buildSceneGraph();
-          status.setText("Applied code to scene");
-          tabs.getSelectionModel().selectFirst();
-        }
-      }
+      FileEditorTab ft = getActiveFileTab();
+      if (ft == null) return;
+      ft.apply();
+      status.setText("Applied");
+      updateContextForActiveTab();
     } catch (Exception ex) {
       status.setText("Apply failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to apply code: " + ex.getMessage());
@@ -579,61 +422,23 @@ public class EditorApp extends Application {
   }
 
   private void doSave(Stage stage) {
-    if (lastOpened == null) { doSaveAs(stage); return; }
-    String nm = lastOpened.getName().toLowerCase();
-    try {
-      if (nm.endsWith(".java")) {
-        String content = javaCodeView.getText();
-        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
-        status.setText("Saved: " + lastOpened.getName());
-      } else if (nm.endsWith(".vns")) {
-        String content = vnsCodeView.getText();
-        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
-        status.setText("Saved: " + lastOpened.getName());
-      } else {
-        if (current == null) return;
-        String sceneName = stripExt(lastOpened.getName());
-        String content = JesExporter.export(current, sceneName);
-        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
-        if (codeView != null) codeView.setText(content);
-        status.setText("Saved: " + lastOpened.getName());
-      }
-    } catch (Exception ex) {
-      status.setText("Save failed");
-      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save: " + ex.getMessage());
-      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
-    }
+    FileEditorTab ft = getActiveFileTab();
+    if (ft == null) return;
+    File f = ft.getFile();
+    if (f == null) { doSaveAs(stage); return; }
+    ft.saveTo(f);
   }
 
   private void doSaveAs(Stage stage) {
     try {
+      FileEditorTab ft = getActiveFileTab(); if (ft == null) return;
       FileChooser fc = new FileChooser();
       fc.setTitle("Save File");
-      if (lastOpened != null) fc.setInitialFileName(lastOpened.getName());
+      if (ft.getFile() != null) fc.setInitialFileName(ft.getFile().getName());
       File f = fc.showSaveDialog(stage);
       if (f == null) return;
-      String nm = f.getName().toLowerCase();
-      if (nm.endsWith(".java")) {
-        String content = javaCodeView.getText();
-        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
-        lastOpened = f;
-        status.setText("Saved: " + f.getName());
-      } else if (nm.endsWith(".vns")) {
-        String content = vnsCodeView.getText();
-        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
-        lastOpened = f;
-        status.setText("Saved: " + f.getName());
-      } else {
-        if (!(nm.endsWith(".jes") || nm.endsWith(".txt"))) {
-          f = new File(f.getAbsolutePath() + ".jes");
-        }
-        String sceneName = stripExt(f.getName());
-        String content = JesExporter.export(current, sceneName);
-        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
-        lastOpened = f;
-        if (codeView != null) codeView.setText(content);
-        status.setText("Saved: " + f.getName());
-      }
+      ft.saveTo(f);
+      openFile(f);
     } catch (Exception ex) {
       status.setText("Save As failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save as: " + ex.getMessage());
@@ -641,17 +446,7 @@ public class EditorApp extends Application {
     }
   }
 
-  private void openJavaFile(File f) {
-    try {
-      String code = Files.readString(f.toPath());
-      javaCodeView.setText(code);
-      lastOpened = f;
-      tabs.getSelectionModel().select(tabJava);
-      status.setText("Loaded: " + f.getName());
-    } catch (Exception ex) {
-      status.setText("Open failed");
-    }
-  }
+  private void openJavaFile(File f) { openFile(f); }
 
   private static String stripExt(String name) {
     if (name == null) return "scene";
@@ -659,20 +454,57 @@ public class EditorApp extends Application {
     return (i > 0) ? name.substring(0, i) : name;
   }
 
-  private void render(long deltaMs) { viewport.render(deltaMs); }
-
-  private void drawSelectionOverlay() { /* handled by viewport */ }
-
-  private void pick(double x, double y) { /* handled by viewport */ }
-
-  private void handleKeyboardCamera(long deltaMs) { /* handled by viewport */ }
-
-  
-
   private void buildSceneGraph() {
-    if (sgView == null) return;
+    updateContextForActiveTab();
+  }
+
+  private String mapKey(KeyCode code) { return code == null ? "" : (code.getName() == null || code.getName().isBlank() ? code.toString() : code.getName()).toUpperCase(); }
+  private int mapButton(MouseButton b) { if (b == MouseButton.PRIMARY) return 1; if (b == MouseButton.MIDDLE) return 2; if (b == MouseButton.SECONDARY) return 3; return 0; }
+
+  private Region icon(String... styleClasses) {
+    Region r = new Region();
+    if (styleClasses != null) r.getStyleClass().addAll(styleClasses);
+    return r;
+  }
+
+  private void openFile(File f) {
+    if (f == null) return;
+    // Find existing tab
+    for (Tab t : filesTabs.getTabs()) {
+      if (t.getUserData() instanceof File ff && ff.equals(f)) {
+        filesTabs.getSelectionModel().select(t);
+        return;
+      }
+    }
+    // Create new tab
+    FileEditorTab editor = new FileEditorTab(f);
+    editor.setOnSelected(ent -> { selected = ent; inspectorView.setSelection(ent); });
+    editor.setOnStatus(s -> status.setText(s));
+    editor.setCommandStack(commands);
+    Tab tab = new Tab(f.getName(), editor);
+    tab.setClosable(true);
+    tab.setUserData(f);
+    tab.setOnClosed(e -> { /* nothing special for now */ });
+    filesTabs.getTabs().add(tab);
+    filesTabs.getSelectionModel().select(tab);
+    lastOpened = f;
+    status.setText("Loaded: " + f.getName());
+    updateContextForActiveTab();
+  }
+
+  private FileEditorTab getActiveFileTab() {
+    Tab t = filesTabs.getSelectionModel().getSelectedItem();
+    if (t == null) return null;
+    return (t.getContent() instanceof FileEditorTab) ? (FileEditorTab) t.getContent() : null;
+  }
+
+  private void updateContextForActiveTab() {
+    FileEditorTab ft = getActiveFileTab();
+    if (sgView == null || inspectorView == null) return;
+    JesScene2D scene = (ft != null) ? ft.getJesScene() : null;
+    inspectorView.setScene(scene);
     sgView.setContext(
-      current,
+      scene,
       ent -> { selected = ent; inspectorView.setSelection(ent); },
       this::fitCameraToEntity,
       s -> status.setText(s)
@@ -680,24 +512,23 @@ public class EditorApp extends Application {
     sgView.refresh();
   }
 
-  private String mapKey(KeyCode code) {
-    if (code == null) return "";
-    // Prefer letter/digit names (A..Z, DIGIT0..9) else use code name
-    String name = code.getName();
-    if (name == null || name.isBlank()) name = code.toString();
-    return name.toUpperCase();
+  private void fitCameraToEntity(Entity2D e) {
+    FileEditorTab ft = getActiveFileTab();
+    if (ft != null && ft.getViewport() != null) {
+      ft.getViewport().fitToEntity(e);
+    }
   }
 
-  private int mapButton(MouseButton b) {
-    if (b == MouseButton.PRIMARY) return 1;
-    if (b == MouseButton.MIDDLE) return 2;
-    if (b == MouseButton.SECONDARY) return 3;
-    return 0;
+  private void resetCamera() {
+    FileEditorTab ft = getActiveFileTab();
+    if (ft != null && ft.getViewport() != null) {
+      ft.getViewport().getCamera().setPosition(0,0);
+      ft.getViewport().getCamera().setZoom(1.0);
+    }
   }
 
-  private Region icon(String... styleClasses) {
-    Region r = new Region();
-    if (styleClasses != null) r.getStyleClass().addAll(styleClasses);
-    return r;
+  private void fitCameraToContent() {
+    FileEditorTab ft = getActiveFileTab();
+    if (ft != null) ft.fitToContent();
   }
 }
