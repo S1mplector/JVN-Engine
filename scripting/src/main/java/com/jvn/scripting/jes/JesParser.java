@@ -42,6 +42,16 @@ public class JesParser {
         s.entities.add(parseEntity());
       } else if (match(IDENT) && "on".equals(prev().lexeme)) {
         s.bindings.add(parseBinding());
+      } else if (match(IDENT) && "timeline".equals(prev().lexeme)) {
+        expect(LBRACE, "'{'");
+        while (!match(RBRACE)) {
+          if (match(IDENT)) {
+            String kind = prev().lexeme;
+            s.timeline.add(parseTimelineAction(kind));
+          } else {
+            i++;
+          }
+        }
       } else if (prev().type == IDENT) {
         // scene-level prop: key : value
         String key = prev().lexeme;
@@ -53,6 +63,36 @@ public class JesParser {
       }
     }
     return s;
+  }
+
+  private JesAst.TimelineAction parseTimelineAction(String kind) {
+    JesAst.TimelineAction a = new JesAst.TimelineAction();
+    a.type = kind;
+    switch (kind) {
+      case "wait" -> {
+        double ms = parseNum();
+        a.props.put("ms", ms);
+      }
+      case "call" -> {
+        String name = expect(STRING, "function name").lexeme;
+        a.target = name;
+      }
+      case "move", "rotate", "scale" -> {
+        String target = expect(STRING, "entity name").lexeme;
+        a.target = target;
+        expect(LBRACE, "'{'");
+        while (!match(RBRACE)) {
+          if (match(IDENT)) {
+            String k = prev().lexeme;
+            expect(COLON, ":");
+            Object v = parseValue();
+            a.props.put(k, v);
+          } else { i++; }
+        }
+      }
+      default -> {}
+    }
+    return a;
   }
 
   private JesAst.InputBinding parseBinding() {

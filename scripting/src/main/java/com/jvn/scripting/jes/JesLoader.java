@@ -21,6 +21,8 @@ public class JesLoader {
     for (JesAst.InputBinding b : s.bindings) {
       scene.addBinding(b.key, b.action, b.props);
     }
+    // Timeline
+    scene.setTimeline(s.timeline);
     // Entities/components
     for (JesAst.EntityDecl e : s.entities) {
       e.components.forEach(c -> {
@@ -35,6 +37,7 @@ public class JesLoader {
             if (fill instanceof double[] arr) p.setFill(arr[0], arr[1], arr[2], arr[3]);
             p.setPosition(x, y);
             scene.add(p);
+            scene.registerEntity(e.name, p);
           }
           case "Label2D" -> {
             String text = str(c, "text", "");
@@ -50,6 +53,7 @@ public class JesLoader {
             String align = str(c, "align", "LEFT");
             try { lbl.setAlign(Label2D.Align.valueOf(align.toUpperCase())); } catch (Exception ignored) {}
             scene.add(lbl);
+            scene.registerEntity(e.name, lbl);
           }
           case "PhysicsBody2D" -> {
             String shape = str(c, "shape", "circle").toLowerCase();
@@ -77,6 +81,7 @@ public class JesLoader {
             Object fill = c.props.get("color");
             if (fill instanceof double[] arr) vis.setColor(arr[0], arr[1], arr[2], arr[3]);
             scene.add(vis);
+            scene.registerEntity(e.name, vis);
           }
           default -> {}
         }
