@@ -1,6 +1,7 @@
 plugins {
   `java-library`
   application
+  id("org.openjfx.javafxplugin") version "0.0.13"
 }
 
 dependencies {
@@ -12,4 +13,9 @@ dependencies {
 
 application {
   mainClass.set("com.jvn.billiards.app.BilliardsGameApp")
+}
+
+javafx {
+  version = "21.0.3"
+  modules("javafx.controls", "javafx.graphics", "javafx.media", "javafx.swing")
 }

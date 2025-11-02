@@ -1,9 +1,25 @@
 package com.jvn.editor;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.InputStream;
+import java.nio.file.Files;
+
+import com.jvn.core.scene2d.Entity2D;
+import com.jvn.editor.commands.CommandStack;
+import com.jvn.editor.ui.InspectorView;
+import com.jvn.editor.ui.JesCodeEditor;
+import com.jvn.editor.ui.ProjectExplorerView;
+import com.jvn.editor.ui.SceneGraphView;
+import com.jvn.editor.ui.ViewportView;
+import com.jvn.scripting.jes.JesExporter;
+import com.jvn.scripting.jes.JesLoader;
+import com.jvn.scripting.jes.runtime.JesScene2D;
+
+import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -11,44 +27,22 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TabPane;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
-import javafx.stage.Stage;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
-import javafx.animation.AnimationTimer;
-import java.io.InputStream;
-import java.io.FileInputStream;
-import java.io.File;
-import java.io.FileWriter;
-import java.nio.file.Files;
-
-import com.jvn.scripting.jes.JesLoader;
-import com.jvn.scripting.jes.JesExporter;
-import com.jvn.scripting.jes.runtime.JesScene2D;
-import com.jvn.fx.scene2d.FxBlitter2D;
-import com.jvn.core.scene2d.Scene2DBase;
-import com.jvn.core.scene2d.Entity2D;
-import com.jvn.core.scene2d.Panel2D;
-import com.jvn.core.scene2d.Label2D;
-import com.jvn.core.physics.RigidBody2D;
-import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
-import com.jvn.core.input.Input;
-import com.jvn.core.graphics.Camera2D;
-import com.jvn.editor.ui.JesCodeEditor;
-import com.jvn.editor.ui.InspectorView;
-import com.jvn.editor.ui.SceneGraphView;
-import com.jvn.editor.ui.ViewportView;
-import com.jvn.editor.commands.CommandStack;
-import com.jvn.editor.commands.MoveEntityCommand;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseButton;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyCodeCombination;
+import javafx.stage.Stage;
 
 public class EditorApp extends Application {
+  // UI
   private ViewportView viewport;
   private JesScene2D current;
   private AnimationTimer timer;
@@ -64,7 +58,11 @@ public class EditorApp extends Application {
   private boolean showGrid = true;
   
   private SceneGraphView sgView;
+  private ProjectExplorerView projView;
   private final CommandStack commands = new CommandStack();
+  private Tab tabProject;
+  private Tab tabScene;
+  private File projectRoot;
 
   public static void main(String[] args) {
     launch(args);
@@ -113,6 +111,8 @@ public class EditorApp extends Application {
     // Menu
     MenuBar mb = new MenuBar();
     Menu menuFile = new Menu("File");
+    MenuItem miOpenProject = new MenuItem("Open Project...");
+    miOpenProject.setOnAction(e -> doOpenProject(primaryStage));
     MenuItem miOpen = new MenuItem("Open JES...");
     miOpen.setOnAction(e -> doOpen(primaryStage));
     MenuItem miReload = new MenuItem("Reload");
@@ -125,7 +125,7 @@ public class EditorApp extends Application {
     miReload.setAccelerator(new KeyCodeCombination(KeyCode.R, KeyCombination.SHORTCUT_DOWN));
     miSave.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
     miSaveAs.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
-    menuFile.getItems().addAll(miOpen, miReload, miSave, miSaveAs);
+    menuFile.getItems().addAll(miOpenProject, new SeparatorMenuItem(), miOpen, miReload, miSave, miSaveAs);
 
     Menu menuCode = new Menu("Code");
     MenuItem miApplyCode = new MenuItem("Apply Code");
@@ -202,7 +202,22 @@ public class EditorApp extends Application {
     sgView = new SceneGraphView();
     sgView.setMinWidth(200);
     sgView.setPrefWidth(240);
-    root.setLeft(sgView);
+    projView = new ProjectExplorerView();
+    projView.setOnOpenFile(f -> {
+      if (f == null) return;
+      String name = f.getName().toLowerCase();
+      if (name.endsWith(".jes") || name.endsWith(".txt")) {
+        openJesFile(f);
+      } else {
+        try { java.awt.Desktop.getDesktop().open(f); } catch (Exception ignored) {}
+      }
+    });
+    TabPane sideTabs = new TabPane();
+    tabProject = new Tab("Project", projView); tabProject.setClosable(false);
+    tabScene = new Tab("Scene", sgView); tabScene.setClosable(false);
+    sideTabs.getTabs().addAll(tabProject, tabScene);
+    sideTabs.setPrefWidth(260);
+    root.setLeft(sideTabs);
 
     Scene scene = new Scene(root, 1200, 800);
     primaryStage.setScene(scene);
@@ -235,9 +250,28 @@ public class EditorApp extends Application {
       fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("JES scripts", "*.jes", "*.txt"));
       File f = fc.showOpenDialog(stage);
       if (f == null) return;
-      try (InputStream in = new FileInputStream(f)) {
-        current = JesLoader.load(in);
-      }
+      openJesFile(f);
+    } catch (Exception ex) {
+      status.setText("Load failed");
+      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
+      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+    }
+  }
+
+  private void doOpenProject(Stage stage) {
+    DirectoryChooser dc = new DirectoryChooser();
+    dc.setTitle("Open Project Directory");
+    File dir = dc.showDialog(stage);
+    if (dir == null) return;
+    this.projectRoot = dir;
+    if (projView != null) projView.setRootDirectory(dir);
+    status.setText("Project: " + dir.getName());
+  }
+
+  private void openJesFile(File f) {
+    if (f == null) return;
+    try (InputStream in = new FileInputStream(f)) {
+      current = JesLoader.load(in);
       lastOpened = f;
       status.setText("Loaded: " + f.getName());
       if (current != null) current.setInput(viewport.getInput());
@@ -248,10 +282,13 @@ public class EditorApp extends Application {
       inspectorView.setScene(current);
       inspectorView.setSelection(null);
       buildSceneGraph();
+      if (projectRoot == null && f.getParentFile() != null) {
+        File dir = f.getParentFile();
+        for (int i = 0; i < 3 && dir != null; i++) dir = dir.getParentFile();
+        if (dir != null) { projectRoot = dir; if (projView != null) projView.setRootDirectory(projectRoot); }
+      }
     } catch (Exception ex) {
-      status.setText("Load failed");
-      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
-      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+      status.setText("Load failed: " + ex.getMessage());
     }
   }
 

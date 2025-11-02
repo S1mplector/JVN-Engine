@@ -1,0 +1,249 @@
+package com.jvn.editor.ui;
+
+import javafx.geometry.Insets;
+import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+
+import java.awt.Desktop;
+import java.io.File;
+import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Consumer;
+
+public class ProjectExplorerView extends VBox {
+  private final Label header = new Label("Project");
+  private final TextField filter = new TextField();
+  private final TreeView<File> tree = new TreeView<>();
+  private File rootDir;
+  private Consumer<File> onOpenFile;
+
+  public ProjectExplorerView() {
+    setSpacing(8);
+    setPadding(new Insets(6));
+    filter.setPromptText("Filter files...");
+    filter.textProperty().addListener((o, ov, nv) -> refresh());
+
+    tree.setShowRoot(true);
+    VBox.setVgrow(tree, Priority.ALWAYS);
+
+    ContextMenu ctx = new ContextMenu();
+    MenuItem miOpen = new MenuItem("Open");
+    MenuItem miReveal = new MenuItem("Reveal in Finder");
+    MenuItem miNewJes = new MenuItem("New JES Script...");
+    MenuItem miNewJava = new MenuItem("New Java Class...");
+    MenuItem miNewFolder = new MenuItem("New Folder...");
+    MenuItem miRename = new MenuItem("Rename...");
+    MenuItem miDelete = new MenuItem("Delete");
+    ctx.getItems().addAll(miOpen, new SeparatorMenuItem(), miNewJes, miNewJava, miNewFolder, new SeparatorMenuItem(), miRename, miDelete, new SeparatorMenuItem(), miReveal);
+    tree.setContextMenu(ctx);
+
+    tree.setCellFactory(tv -> new TreeCell<>() {
+      @Override protected void updateItem(File item, boolean empty) {
+        super.updateItem(item, empty);
+        if (empty || item == null) { setText(null); setGraphic(null); return; }
+        setText(item.getName().isEmpty() ? item.getAbsolutePath() : item.getName());
+      }
+    });
+
+    tree.setOnMouseClicked(e -> {
+      if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+        TreeItem<File> it = tree.getSelectionModel().getSelectedItem();
+        if (it != null && it.getValue() != null && it.getValue().isFile()) openFile(it.getValue());
+      }
+    });
+
+    miOpen.setOnAction(e -> {
+      File f = getSelectedFile();
+      if (f != null && f.isFile()) openFile(f);
+    });
+    miReveal.setOnAction(e -> revealSelected());
+    miNewJes.setOnAction(e -> createJesInSelected());
+    miNewJava.setOnAction(e -> createJavaInProject());
+    miNewFolder.setOnAction(e -> createFolderInSelected());
+    miRename.setOnAction(e -> renameSelected());
+    miDelete.setOnAction(e -> deleteSelected());
+
+    getChildren().addAll(header, filter, tree);
+  }
+
+  public void setRootDirectory(File dir) {
+    this.rootDir = dir;
+    refresh();
+  }
+
+  public void setOnOpenFile(Consumer<File> c) { this.onOpenFile = c; }
+
+  public File getSelectedFile() {
+    TreeItem<File> it = tree.getSelectionModel().getSelectedItem();
+    return it == null ? null : it.getValue();
+  }
+
+  public void refresh() {
+    if (rootDir == null) { tree.setRoot(null); return; }
+    String q = filter.getText(); if (q == null) q = ""; String qq = q.toLowerCase(Locale.ROOT);
+    TreeItem<File> root = buildTreeFiltered(rootDir, qq);
+    tree.setRoot(root);
+    if (root != null) root.setExpanded(true);
+  }
+
+  private TreeItem<File> buildTreeFiltered(File dir, String queryLower) {
+    if (dir == null || !dir.exists()) return null;
+    if (dir.isFile()) return new TreeItem<>(dir);
+    List<TreeItem<File>> children = new ArrayList<>();
+    File[] files = dir.listFiles();
+    if (files != null) {
+      java.util.Arrays.sort(files, (a,b) -> a.getName().compareToIgnoreCase(b.getName()));
+      for (File f : files) {
+        if (f.getName().startsWith(".")) continue;
+        TreeItem<File> child = buildTreeFiltered(f, queryLower);
+        if (child == null) continue;
+        boolean match = f.getName().toLowerCase(Locale.ROOT).contains(queryLower) || hasAnyMatchingDescendant(child, queryLower);
+        if (queryLower.isEmpty() || match) children.add(child);
+      }
+    }
+    if (!Objects.equals(dir, rootDir) && children.isEmpty() && !dir.getName().toLowerCase(Locale.ROOT).contains(queryLower)) return null;
+    TreeItem<File> node = new TreeItem<>(dir);
+    node.getChildren().setAll(children);
+    return node;
+  }
+
+  private boolean hasAnyMatchingDescendant(TreeItem<File> node, String queryLower) {
+    if (node == null) return false;
+    if (node.getValue() != null && node.getValue().getName().toLowerCase(Locale.ROOT).contains(queryLower)) return true;
+    for (TreeItem<File> c : node.getChildren()) if (hasAnyMatchingDescendant(c, queryLower)) return true;
+    return false;
+  }
+
+  private void openFile(File f) {
+    if (onOpenFile != null) { onOpenFile.accept(f); return; }
+    try { Desktop.getDesktop().open(f); } catch (Exception ignored) {}
+  }
+
+  private void revealSelected() {
+    File f = getSelectedFile(); if (f == null) return;
+    try { Desktop.getDesktop().open(f.isDirectory() ? f : f.getParentFile()); } catch (Exception ignored) {}
+  }
+
+  private File currentTargetDirectory() {
+    File sel = getSelectedFile();
+    if (sel == null) return rootDir;
+    return sel.isDirectory() ? sel : sel.getParentFile();
+  }
+
+  private void createJesInSelected() {
+    File dir = currentTargetDirectory(); if (dir == null) return;
+    TextInputDialog dlg = new TextInputDialog("scene");
+    dlg.setHeaderText(null); dlg.setTitle("New JES Script"); dlg.setContentText("File name (without extension):");
+    Optional<String> res = dlg.showAndWait();
+    if (res.isEmpty()) return;
+    String base = res.get().trim(); if (base.isEmpty()) return;
+    File f = new File(dir, base.endsWith(".jes") ? base : base + ".jes");
+    if (f.exists()) return;
+    try (FileWriter fw = new FileWriter(f)) {
+      String sceneName = base.replaceAll("\\.jes$", "");
+      fw.write("scene \"" + sceneName + "\" {\n}\n");
+    } catch (Exception ignored) {}
+    refresh();
+    selectPath(f);
+  }
+
+  private void createFolderInSelected() {
+    File dir = currentTargetDirectory(); if (dir == null) return;
+    TextInputDialog dlg = new TextInputDialog("new-folder");
+    dlg.setHeaderText(null); dlg.setTitle("New Folder"); dlg.setContentText("Folder name:");
+    Optional<String> res = dlg.showAndWait();
+    if (res.isEmpty()) return;
+    String name = res.get().trim(); if (name.isEmpty()) return;
+    File f = new File(dir, name);
+    if (!f.exists()) f.mkdirs();
+    refresh();
+    selectPath(f);
+  }
+
+  private void renameSelected() {
+    File f = getSelectedFile(); if (f == null || Objects.equals(f, rootDir)) return;
+    TextInputDialog dlg = new TextInputDialog(f.getName());
+    dlg.setHeaderText(null); dlg.setTitle("Rename"); dlg.setContentText("New name:");
+    Optional<String> res = dlg.showAndWait(); if (res.isEmpty()) return;
+    String nn = res.get().trim(); if (nn.isEmpty()) return;
+    File nf = new File(f.getParentFile(), nn);
+    boolean ok = f.renameTo(nf);
+    if (ok) { refresh(); selectPath(nf); }
+  }
+
+  private void deleteSelected() {
+    File f = getSelectedFile(); if (f == null || Objects.equals(f, rootDir)) return;
+    Alert a = new Alert(Alert.AlertType.CONFIRMATION, "Delete '" + f.getName() + "'?", ButtonType.YES, ButtonType.NO);
+    a.setHeaderText(null); a.setTitle("Confirm Delete");
+    Optional<ButtonType> r = a.showAndWait();
+    if (r.isEmpty() || r.get() != ButtonType.YES) return;
+    try { deleteRecursive(f.toPath()); } catch (Exception ignored) {}
+    refresh();
+  }
+
+  private void deleteRecursive(Path p) throws Exception {
+    if (Files.isDirectory(p)) {
+      try (var s = Files.list(p)) { s.forEach(pp -> { try { deleteRecursive(pp); } catch (Exception ignored) {} }); }
+    }
+    Files.deleteIfExists(p);
+  }
+
+  private void createJavaInProject() {
+    File srcRoot = detectJavaSrcRoot(rootDir);
+    if (srcRoot == null) srcRoot = currentTargetDirectory();
+    TextInputDialog pkgDlg = new TextInputDialog("com.jvn.game");
+    pkgDlg.setHeaderText(null); pkgDlg.setTitle("New Java Class"); pkgDlg.setContentText("Package:");
+    Optional<String> pkgRes = pkgDlg.showAndWait(); if (pkgRes.isEmpty()) return;
+    String pkg = pkgRes.get().trim();
+    TextInputDialog clsDlg = new TextInputDialog("MyClass");
+    clsDlg.setHeaderText(null); clsDlg.setTitle("New Java Class"); clsDlg.setContentText("Class name:");
+    Optional<String> clsRes = clsDlg.showAndWait(); if (clsRes.isEmpty()) return;
+    String cls = clsRes.get().trim();
+    File destDir = pkg.isEmpty() ? srcRoot : new File(srcRoot, pkg.replace('.', File.separatorChar));
+    destDir.mkdirs();
+    File f = new File(destDir, cls + ".java");
+    if (f.exists()) return;
+    try (FileWriter fw = new FileWriter(f)) {
+      if (!pkg.isEmpty()) fw.write("package " + pkg + ";\n\n");
+      fw.write("public class " + cls + " {\n}\n");
+    } catch (Exception ignored) {}
+    refresh();
+    selectPath(f);
+  }
+
+  private File detectJavaSrcRoot(File base) {
+    if (base == null) return null;
+    File m = new File(base, "src/main/java");
+    if (m.exists() && m.isDirectory()) return m;
+    File[] subs = base.listFiles();
+    if (subs != null) for (File s : subs) {
+      File d = detectJavaSrcRoot(s);
+      if (d != null) return d;
+    }
+    return null;
+  }
+
+  private void selectPath(File f) {
+    if (f == null) return;
+    List<File> chain = new ArrayList<>();
+    File cur = f;
+    while (cur != null) { chain.add(0, cur); if (Objects.equals(cur, rootDir)) break; cur = cur.getParentFile(); }
+    TreeItem<File> node = tree.getRoot();
+    for (int i = 1; i < chain.size() && node != null; i++) {
+      File want = chain.get(i);
+      node.setExpanded(true);
+      TreeItem<File> next = null;
+      for (TreeItem<File> c : node.getChildren()) if (c.getValue().equals(want)) { next = c; break; }
+      node = next;
+    }
+    if (node != null) tree.getSelectionModel().select(node);
+  }
+}
