@@ -46,5 +46,21 @@ public interface Blitter2D {
 
   // Optional clipping
   default void setClipRect(double x, double y, double w, double h) {}
+
+  // Optional polygon helpers
+  default void fillPolygon(double[] xy) {}
+  default void strokePolygon(double[] xy) {}
+
+  // Optional arc helpers (degrees)
+  default void fillArc(double cx, double cy, double r, double startDeg, double sweepDeg) {}
+  default void strokeArc(double cx, double cy, double r, double startDeg, double sweepDeg) {}
+
+  // Optional gradient fills
+  // positions: array of stops in [0..1]; colorsRgba: flattened [r,g,b,a] per stop (length = positions.length * 4)
+  default void setFillLinearGradient(double x1, double y1, double x2, double y2, double[] positions, double[] colorsRgba) {}
+  default void setFillRadialGradient(double cx, double cy, double r, double[] positions, double[] colorsRgba) {}
+
+  // Optional text alignment; hAlign: left|center|right, vAlign: baseline|top|middle|bottom
+  default void setTextAlign(String hAlign, String vAlign) {}
 }
 

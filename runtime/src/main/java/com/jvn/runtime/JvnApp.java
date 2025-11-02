@@ -10,8 +10,11 @@ import com.jvn.core.localization.Localization;
 import com.jvn.core.menu.MainMenuScene;
 import com.jvn.fx.FxLauncher;
 import com.jvn.fx.audio.FxAudioService;
+import com.jvn.scripting.jes.JesLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 
 public class JvnApp {
   private static final Logger log = LoggerFactory.getLogger(JvnApp.class);
@@ -22,6 +25,7 @@ public class JvnApp {
     String locale = "en";
     boolean launchBilliards = false;
     String ui = "fx"; // fx | swing
+    String jesScript = null;
 
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
@@ -46,6 +50,9 @@ public class JvnApp {
           break;
         case "--ui":
           if (i + 1 < args.length) ui = args[++i];
+          break;
+        case "--jes":
+          if (i + 1 < args.length) jesScript = args[++i];
           break;
         default:
           log.warn("Unknown argument: {}", a);
@@ -73,7 +80,28 @@ public class JvnApp {
     Engine engine = new Engine(cfg);
     engine.start();
 
-    if (launchBilliards) {
+    if (jesScript != null) {
+      try {
+        AssetCatalog cat = new AssetCatalog();
+        InputStream in = cat.open(com.jvn.core.assets.AssetType.SCRIPT, jesScript);
+        var scene = JesLoader.load(in);
+        engine.scenes().push(scene);
+      } catch (Exception e) {
+        log.warn("Failed to load JES script '{}': {}. Loading inline sample.", jesScript, e.toString());
+        try {
+          String sample = "scene \"Sample\" {\n" +
+              "  entity \"panel\" {\n" +
+              "    component Panel2D { x: 0.2 y: 0.2 w: 1.0 h: 0.6 fill: rgb(0.1,0.6,0.2,0.8) }\n" +
+              "  }\n" +
+              "}\n";
+          var in2 = new ByteArrayInputStream(sample.getBytes());
+          var scene = JesLoader.load(in2);
+          engine.scenes().push(scene);
+        } catch (Exception ex) {
+          log.warn("Inline JES sample failed: {}", ex.toString());
+        }
+      }
+    } else if (launchBilliards) {
       try {
         com.jvn.billiards.scene.BilliardsScene2D billiards = new com.jvn.billiards.scene.BilliardsScene2D();
         engine.scenes().push(billiards);
