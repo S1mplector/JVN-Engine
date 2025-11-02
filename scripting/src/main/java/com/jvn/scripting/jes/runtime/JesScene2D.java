@@ -47,6 +47,7 @@ public class JesScene2D extends Scene2DBase {
   public void setTimeline(List<JesAst.TimelineAction> tl) { this.timeline = tl == null ? new ArrayList<>() : new ArrayList<>(tl); this.tlIndex = 0; this.tlElapsedMs = 0; this.actionState.clear(); }
   public java.util.Set<String> names() { return named.keySet(); }
   public Entity2D find(String name) { return named.get(name); }
+  public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
 
   @Override
   public void update(long deltaMs) {

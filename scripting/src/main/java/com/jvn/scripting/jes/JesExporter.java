@@ -114,7 +114,7 @@ public class JesExporter {
   private static Map<String, Entity2D> findAllNamedEntities(JesScene2D scene) {
     // This would need access to the named entities map in JesScene2D
     // For now, return empty map
-    return new java.util.HashMap<>();
+    return scene == null ? new java.util.HashMap<>() : scene.exportNamed();
   }
   
   private static String escapeString(String s) {

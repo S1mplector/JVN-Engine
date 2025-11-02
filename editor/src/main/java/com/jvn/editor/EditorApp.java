@@ -25,9 +25,11 @@ import javafx.animation.AnimationTimer;
 import java.io.InputStream;
 import java.io.FileInputStream;
 import java.io.File;
+import java.io.FileWriter;
 import javafx.scene.paint.Color;
 
 import com.jvn.scripting.jes.JesLoader;
+import com.jvn.scripting.jes.JesExporter;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.fx.scene2d.FxBlitter2D;
 import com.jvn.core.scene2d.Scene2DBase;
@@ -70,7 +72,11 @@ public class EditorApp extends Application {
     miOpen.setOnAction(e -> doOpen(primaryStage));
     MenuItem miReload = new MenuItem("Reload");
     miReload.setOnAction(e -> doReload());
-    menuFile.getItems().addAll(miOpen, miReload);
+    MenuItem miSave = new MenuItem("Save");
+    miSave.setOnAction(e -> doSave(primaryStage));
+    MenuItem miSaveAs = new MenuItem("Save As...");
+    miSaveAs.setOnAction(e -> doSaveAs(primaryStage));
+    menuFile.getItems().addAll(miOpen, miReload, miSave, miSaveAs);
     mb.getMenus().addAll(menuFile);
 
     // Toolbar
@@ -170,6 +176,48 @@ public class EditorApp extends Application {
     } catch (Exception ex) {
       status.setText("Reload failed");
     }
+  }
+
+  private void doSave(Stage stage) {
+    if (current == null) return;
+    if (lastOpened == null) { doSaveAs(stage); return; }
+    try {
+      String sceneName = stripExt(lastOpened.getName());
+      String content = JesExporter.export(current, sceneName);
+      try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
+      status.setText("Saved: " + lastOpened.getName());
+    } catch (Exception ex) {
+      status.setText("Save failed");
+      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save: " + ex.getMessage());
+      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+    }
+  }
+
+  private void doSaveAs(Stage stage) {
+    if (current == null) return;
+    try {
+      FileChooser fc = new FileChooser();
+      fc.setTitle("Save JES Script");
+      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("JES scripts", "*.jes", "*.txt"));
+      if (lastOpened != null) fc.setInitialFileName(lastOpened.getName());
+      File f = fc.showSaveDialog(stage);
+      if (f == null) return;
+      String sceneName = stripExt(f.getName());
+      String content = JesExporter.export(current, sceneName);
+      try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
+      lastOpened = f;
+      status.setText("Saved: " + f.getName());
+    } catch (Exception ex) {
+      status.setText("Save As failed");
+      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save as: " + ex.getMessage());
+      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+    }
+  }
+
+  private static String stripExt(String name) {
+    if (name == null) return "scene";
+    int i = name.lastIndexOf('.');
+    return (i > 0) ? name.substring(0, i) : name;
   }
 
   private void render(long deltaMs) {
