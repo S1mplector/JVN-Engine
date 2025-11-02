@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class JesScene2D extends Scene2DBase {
   private final PhysicsWorld2D world = new PhysicsWorld2D();
@@ -20,11 +22,13 @@ public class JesScene2D extends Scene2DBase {
   private PhysicsDebugOverlay2D debugOverlay;
   private final List<Binding> bindings = new ArrayList<>();
   private final Map<String, Entity2D> named = new HashMap<>();
+  private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
   private int tlIndex = 0;
   private double tlElapsedMs = 0;
   private final Map<Integer, ActionRuntime> actionState = new HashMap<>();
+  private BiConsumer<String, Map<String,Object>> actionHandler;
 
   public static class Binding {
     public final String key;
@@ -50,6 +54,8 @@ public class JesScene2D extends Scene2DBase {
   public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
   public java.util.List<Binding> exportBindings() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(bindings)); }
   public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
+  public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
+  public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
@@ -96,7 +102,10 @@ public class JesScene2D extends Scene2DBase {
         if (tlElapsedMs >= ms) { tlIndex++; tlElapsedMs = 0; }
       }
       case "call" -> {
-        // Placeholder: no-op
+        Consumer<Map<String,Object>> h = callHandlers.get(a.target);
+        if (h != null) {
+          try { h.accept(a.props == null ? java.util.Collections.emptyMap() : a.props); } catch (Exception ignored) {}
+        }
         tlIndex++;
         tlElapsedMs = 0;
       }
@@ -163,11 +172,14 @@ public class JesScene2D extends Scene2DBase {
   }
 
   private void handleAction(Binding b) {
-    switch (b.action) {
-      case "toggleDebug" -> toggleDebugOverlay();
-      case "spawnCircle" -> spawnCircle(b.props);
-      case "spawnBox" -> spawnBox(b.props);
-      default -> {}
+    boolean handled = switch (b.action) {
+      case "toggleDebug" -> { toggleDebugOverlay(); yield true; }
+      case "spawnCircle" -> { spawnCircle(b.props); yield true; }
+      case "spawnBox" -> { spawnBox(b.props); yield true; }
+      default -> false;
+    };
+    if (!handled && actionHandler != null) {
+      try { actionHandler.accept(b.action, b.props); } catch (Exception ignored) {}
     }
   }
 

@@ -30,6 +30,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -37,6 +38,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -66,6 +68,47 @@ public class EditorApp extends Application {
 
   public static void main(String[] args) {
     launch(args);
+  }
+
+  private void doRunGame(Stage stage) {
+    File root = this.projectRoot;
+    if (root == null) {
+      DirectoryChooser dc = new DirectoryChooser();
+      dc.setTitle("Select Project Root (contains gradlew)");
+      root = dc.showDialog(stage);
+      if (root == null) return;
+      this.projectRoot = root;
+      if (projView != null) projView.setRootDirectory(root);
+    }
+    File gradlew = new File(root, "gradlew");
+    if (!gradlew.exists()) { status.setText("gradlew not found in project root"); return; }
+    try {
+      ProcessBuilder pb = new ProcessBuilder(gradlew.getAbsolutePath(), ":billiards-game:run", "-x", "test");
+      pb.directory(root);
+      pb.redirectErrorStream(true);
+      Process p = pb.start();
+      javafx.stage.Stage logStage = new javafx.stage.Stage();
+      javafx.scene.control.TextArea ta = new javafx.scene.control.TextArea();
+      ta.setEditable(false);
+      logStage.setTitle("Run Billiards Game");
+      logStage.setScene(new javafx.scene.Scene(new javafx.scene.layout.BorderPane(ta), 800, 500));
+      logStage.show();
+      Thread t = new Thread(() -> {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+          String line;
+          while ((line = r.readLine()) != null) {
+            String ln = line;
+            javafx.application.Platform.runLater(() -> {
+              ta.appendText(ln + "\n");
+            });
+          }
+        } catch (Exception ignored) {}
+      });
+      t.setDaemon(true);
+      t.start();
+    } catch (Exception ex) {
+      status.setText("Run failed");
+    }
   }
 
   private void openSample(String absolutePath) {
@@ -147,6 +190,10 @@ public class EditorApp extends Application {
     miToggleGrid.setOnAction(e -> { showGrid = !showGrid; if (viewport != null) viewport.setShowGrid(showGrid); });
 
     Menu menuSamples = new Menu("Samples");
+    Menu menuProject = new Menu("Project");
+    MenuItem miRun = new MenuItem("Run Billiards Game");
+    miRun.setOnAction(e -> doRunGame(primaryStage));
+    menuProject.getItems().addAll(miRun);
     Menu menuEdit = new Menu("Edit");
     MenuItem miUndo = new MenuItem("Undo");
     miUndo.setOnAction(e -> { commands.undo(); status.setText("Undo"); inspectorView.setSelection(selected); });
@@ -161,7 +208,7 @@ public class EditorApp extends Application {
     miShowcase.setOnAction(e -> openSample("/Users/ilgazmehmetoglu/Desktop/Projects/Percept2 Engine/samples/showcase.jes"));
     menuSamples.getItems().addAll(miBilliards, miShowcase);
 
-    mb.getMenus().addAll(menuFile, menuEdit, menuCode, menuView, menuSamples);
+    mb.getMenus().addAll(menuFile, menuEdit, menuCode, menuView, menuProject, menuSamples);
 
     // Toolbar
     HBox toolbar = new HBox(8);
@@ -170,9 +217,26 @@ public class EditorApp extends Application {
     Button btnApply = new Button("Apply Code"); btnApply.setOnAction(e -> applyCodeFromEditor());
     Button btnFit = new Button("Fit"); btnFit.setOnAction(e -> fitCameraToContent());
     Button btnReset = new Button("Reset"); btnReset.setOnAction(e -> resetCamera());
+    // Icons to the right of text
+    btnOpen.setGraphic(icon("icon", "icon-open"));
+    btnOpen.setContentDisplay(ContentDisplay.RIGHT);
+    btnOpen.setGraphicTextGap(6);
+    btnReload.setGraphic(icon("icon", "icon-reload"));
+    btnReload.setContentDisplay(ContentDisplay.RIGHT);
+    btnReload.setGraphicTextGap(6);
+    btnApply.setGraphic(icon("icon", "icon-apply"));
+    btnApply.setContentDisplay(ContentDisplay.RIGHT);
+    btnApply.setGraphicTextGap(6);
+    btnFit.setGraphic(icon("icon", "icon-fit"));
+    btnFit.setContentDisplay(ContentDisplay.RIGHT);
+    btnFit.setGraphicTextGap(6);
+    btnReset.setGraphic(icon("icon", "icon-reset"));
+    btnReset.setContentDisplay(ContentDisplay.RIGHT);
+    btnReset.setGraphicTextGap(6);
     btnApply.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) applyCodeFromEditor(); });
     status = new Label("Ready");
-    toolbar.getChildren().addAll(btnOpen, btnReload, btnApply, btnFit, btnReset, status);
+    Region logo = icon("jvn-logo");
+    toolbar.getChildren().addAll(logo, btnOpen, btnReload, btnApply, btnFit, btnReset, status);
 
     // Viewport component
     viewport = new ViewportView();
@@ -220,6 +284,11 @@ public class EditorApp extends Application {
     root.setLeft(sideTabs);
 
     Scene scene = new Scene(root, 1200, 800);
+    // Load editor stylesheet (icons, theme, etc.)
+    try {
+      String css = EditorApp.class.getResource("/com/jvn/editor/editor.css").toExternalForm();
+      scene.getStylesheets().add(css);
+    } catch (Exception ignore) {}
     primaryStage.setScene(scene);
     primaryStage.show();
     viewport.setFocusTraversable(true);
@@ -415,5 +484,11 @@ public class EditorApp extends Application {
     if (b == MouseButton.MIDDLE) return 2;
     if (b == MouseButton.SECONDARY) return 3;
     return 0;
+  }
+
+  private Region icon(String... styleClasses) {
+    Region r = new Region();
+    if (styleClasses != null) r.getStyleClass().addAll(styleClasses);
+    return r;
   }
 }

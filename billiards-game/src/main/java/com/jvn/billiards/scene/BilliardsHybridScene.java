@@ -37,6 +37,28 @@ public class BilliardsHybridScene extends JesScene2D {
       @Override public void onTurnChanged(int playerIndex) { /* optional */ }
       @Override public void onGameOver(int winningPlayerIndex) { audio.playSfx("win"); }
     });
+
+    this.setActionHandler((action, props) -> {
+      if ("strike".equalsIgnoreCase(action)) {
+        double p = toNum(props == null ? null : props.get("power"), cue.getPower());
+        cue.setPower(p);
+        game.beginShot();
+        audio.playSfx("strike");
+        cue.strike(game.getWorld(), game.getWorld().getConfig().breakSpeed);
+      } else if ("respawnCue".equalsIgnoreCase(action)) {
+        game.getWorld().respawnCueDefault();
+      } else if ("setPower".equalsIgnoreCase(action)) {
+        double p = toNum(props == null ? null : props.get("p"), cue.getPower());
+        cue.setPower(p);
+      } else if ("playSfx".equalsIgnoreCase(action)) {
+        Object name = props == null ? null : props.get("name");
+        if (name != null) audio.playSfx(String.valueOf(name));
+      }
+    });
+
+    this.registerCall("respawnCue", m -> game.getWorld().respawnCueDefault());
+    this.registerCall("playSfx", m -> { Object n = m == null ? null : m.get("name"); if (n != null) audio.playSfx(String.valueOf(n)); });
+    this.registerCall("setPower", m -> { double p = toNum(m == null ? null : m.get("p"), cue.getPower()); cue.setPower(p); });
   }
 
   public BilliardsGame getGame() { return game; }
@@ -160,4 +182,6 @@ public class BilliardsHybridScene extends JesScene2D {
       this.registerEntity(e.getKey(), ent);
     }
   }
+
+  private static double toNum(Object v, double def) { return v instanceof Number n ? n.doubleValue() : def; }
 }
