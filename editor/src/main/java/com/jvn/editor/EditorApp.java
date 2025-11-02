@@ -30,6 +30,10 @@ import com.jvn.core.scene2d.Panel2D;
 import com.jvn.core.scene2d.Label2D;
 import com.jvn.core.physics.RigidBody2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
+import com.jvn.core.input.Input;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 
 public class EditorApp extends Application {
   private Canvas canvas;
@@ -40,6 +44,7 @@ public class EditorApp extends Application {
   private File lastOpened;
   private Entity2D selected;
   private VBox inspector;
+  private Input input = new Input();
 
   public static void main(String[] args) {
     launch(args);
@@ -75,6 +80,11 @@ public class EditorApp extends Application {
       pick(e.getX(), e.getY());
       buildInspector();
     });
+    canvas.setOnMouseMoved(e -> { input.setMousePosition(e.getX(), e.getY()); });
+    canvas.setOnMouseDragged(e -> { input.setMousePosition(e.getX(), e.getY()); });
+    canvas.setOnScroll(e -> { input.addScrollDeltaY(e.getDeltaY()); });
+    canvas.setOnMousePressed(e -> { input.mouseDown(mapButton(e.getButton())); });
+    canvas.setOnMouseReleased(e -> { input.mouseUp(mapButton(e.getButton())); });
 
     // Layout
     BorderPane top = new BorderPane();
@@ -90,6 +100,9 @@ public class EditorApp extends Application {
     Scene scene = new Scene(root, 1200, 800);
     primaryStage.setScene(scene);
     primaryStage.show();
+    canvas.setFocusTraversable(true);
+    scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> input.keyDown(mapKey(e.getCode())));
+    scene.addEventHandler(KeyEvent.KEY_RELEASED, e -> input.keyUp(mapKey(e.getCode())));
 
     // Resize handling
     scene.widthProperty().addListener((o,ov,nv) -> canvas.setWidth(nv.doubleValue()));
@@ -120,6 +133,7 @@ public class EditorApp extends Application {
       }
       lastOpened = f;
       status.setText("Loaded: " + f.getName());
+      if (current != null) current.setInput(input);
       selected = null;
       buildInspector();
     } catch (Exception ex) {
@@ -134,6 +148,7 @@ public class EditorApp extends Application {
     try (InputStream in = new FileInputStream(lastOpened)) {
       current = JesLoader.load(in);
       status.setText("Reloaded: " + lastOpened.getName());
+      if (current != null) current.setInput(input);
       selected = null;
       buildInspector();
     } catch (Exception ex) {
@@ -152,6 +167,7 @@ public class EditorApp extends Application {
       current.update(deltaMs);
       current.render(blitter, w, h);
       drawSelectionOverlay();
+      if (current.getInput() != null) current.getInput().endFrame();
     } else {
       gc.setFill(javafx.scene.paint.Color.WHITE);
       gc.fillText("Open a JES file to preview", 20, 30);
@@ -235,5 +251,20 @@ public class EditorApp extends Application {
   private void applyDouble(TextField tf, java.util.function.DoubleConsumer onChange) {
     try { double v = Double.parseDouble(tf.getText()); onChange.accept(v); status.setText("Updated " + tf.getText()); }
     catch (Exception ex) { /* ignore parse errors */ }
+  }
+
+  private String mapKey(KeyCode code) {
+    if (code == null) return "";
+    // Prefer letter/digit names (A..Z, DIGIT0..9) else use code name
+    String name = code.getName();
+    if (name == null || name.isBlank()) name = code.toString();
+    return name.toUpperCase();
+  }
+
+  private int mapButton(MouseButton b) {
+    if (b == MouseButton.PRIMARY) return 1;
+    if (b == MouseButton.MIDDLE) return 2;
+    if (b == MouseButton.SECONDARY) return 3;
+    return 0;
   }
 }

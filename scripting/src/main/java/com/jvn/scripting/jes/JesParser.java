@@ -152,17 +152,23 @@ public class JesParser {
       return Double.parseDouble(prev().lexeme);
     } else if (match(STRING)) {
       return prev().lexeme;
-    } else if (match(IDENT) && "rgb".equals(prev().lexeme)) {
-      expect(LPAREN, "(");
-      double r = parseNum(); expect(COMMA, ",");
-      double g = parseNum(); expect(COMMA, ",");
-      double b = parseNum();
-      double a = 1.0;
-      if (match(COMMA)) a = parseNum();
-      expect(RPAREN, ")");
-      return new double[]{r,g,b,a};
-    } else if (match(IDENT) && ("true".equalsIgnoreCase(prev().lexeme) || "false".equalsIgnoreCase(prev().lexeme))) {
-      return Boolean.parseBoolean(prev().lexeme);
+    } else if (match(IDENT)) {
+      String ident = prev().lexeme;
+      if ("rgb".equals(ident) || "rgba".equals(ident)) {
+        expect(LPAREN, "(");
+        double r = parseNum(); expect(COMMA, ",");
+        double g = parseNum(); expect(COMMA, ",");
+        double b = parseNum();
+        double a = 1.0;
+        if (match(COMMA)) a = parseNum();
+        expect(RPAREN, ")");
+        return new double[]{r,g,b,a};
+      } else if ("true".equalsIgnoreCase(ident) || "false".equalsIgnoreCase(ident)) {
+        return Boolean.parseBoolean(ident);
+      } else {
+        // Treat bare identifiers as string literals (e.g., left, circle, box)
+        return ident;
+      }
     }
     throw error("value expected");
   }

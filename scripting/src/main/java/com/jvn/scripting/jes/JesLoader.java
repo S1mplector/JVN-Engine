@@ -3,6 +3,7 @@ package com.jvn.scripting.jes;
 import com.jvn.core.physics.RigidBody2D;
 import com.jvn.core.scene2d.Label2D;
 import com.jvn.core.scene2d.Panel2D;
+import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.scripting.jes.ast.JesAst;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
@@ -38,6 +39,34 @@ public class JesLoader {
             p.setPosition(x, y);
             scene.add(p);
             scene.registerEntity(e.name, p);
+          }
+          case "Sprite2D" -> {
+            String image = str(c, "image", null);
+            double x = num(c, "x", 0);
+            double y = num(c, "y", 0);
+            double w = num(c, "w", 64);
+            double h = num(c, "h", 64);
+            double alpha = num(c, "alpha", 1.0);
+            double ox = num(c, "originX", 0.0);
+            double oy = num(c, "originY", 0.0);
+            Sprite2D sp;
+            boolean hasRegion = has(c, "sx") || has(c, "sw");
+            if (hasRegion) {
+              double sx = num(c, "sx", 0);
+              double sy = num(c, "sy", 0);
+              double sw = num(c, "sw", w);
+              double sh = num(c, "sh", h);
+              double dw = num(c, "dw", w);
+              double dh = num(c, "dh", h);
+              sp = new Sprite2D(image, dw, dh).region(image, sx, sy, sw, sh, dw, dh);
+            } else {
+              sp = new Sprite2D(image, w, h);
+            }
+            sp.setPosition(x, y);
+            sp.setAlpha(alpha);
+            sp.setOrigin(ox, oy);
+            scene.add(sp);
+            scene.registerEntity(e.name, sp);
           }
           case "Label2D" -> {
             String text = str(c, "text", "");
@@ -102,4 +131,5 @@ public class JesLoader {
     Object v = c.props.get(key);
     return v instanceof Boolean b ? b : def;
   }
+  private static boolean has(JesAst.ComponentDecl c, String key) { return c.props.containsKey(key); }
 }
