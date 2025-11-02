@@ -38,11 +38,12 @@ public class ProjectExplorerView extends VBox {
     MenuItem miOpen = new MenuItem("Open");
     MenuItem miReveal = new MenuItem("Reveal in Finder");
     MenuItem miNewJes = new MenuItem("New JES Script...");
+    MenuItem miNewVns = new MenuItem("New VNS Script...");
     MenuItem miNewJava = new MenuItem("New Java Class...");
     MenuItem miNewFolder = new MenuItem("New Folder...");
     MenuItem miRename = new MenuItem("Rename...");
     MenuItem miDelete = new MenuItem("Delete");
-    ctx.getItems().addAll(miOpen, new SeparatorMenuItem(), miNewJes, miNewJava, miNewFolder, new SeparatorMenuItem(), miRename, miDelete, new SeparatorMenuItem(), miReveal);
+    ctx.getItems().addAll(miOpen, new SeparatorMenuItem(), miNewJes, miNewVns, miNewJava, miNewFolder, new SeparatorMenuItem(), miRename, miDelete, new SeparatorMenuItem(), miReveal);
     tree.setContextMenu(ctx);
 
     tree.setCellFactory(tv -> new TreeCell<>() {
@@ -66,6 +67,7 @@ public class ProjectExplorerView extends VBox {
     });
     miReveal.setOnAction(e -> revealSelected());
     miNewJes.setOnAction(e -> createJesInSelected());
+    miNewVns.setOnAction(e -> createVnsInSelected());
     miNewJava.setOnAction(e -> createJavaInProject());
     miNewFolder.setOnAction(e -> createFolderInSelected());
     miRename.setOnAction(e -> renameSelected());
@@ -150,6 +152,27 @@ public class ProjectExplorerView extends VBox {
     try (FileWriter fw = new FileWriter(f)) {
       String sceneName = base.replaceAll("\\.jes$", "");
       fw.write("scene \"" + sceneName + "\" {\n}\n");
+    } catch (Exception ignored) {}
+    refresh();
+    selectPath(f);
+  }
+
+  private void createVnsInSelected() {
+    File dir = currentTargetDirectory(); if (dir == null) return;
+    TextInputDialog dlg = new TextInputDialog("story");
+    dlg.setHeaderText(null); dlg.setTitle("New VNS Script"); dlg.setContentText("File name (without extension):");
+    Optional<String> res = dlg.showAndWait();
+    if (res.isEmpty()) return;
+    String base = res.get().trim(); if (base.isEmpty()) return;
+    File f = new File(dir, base.endsWith(".vns") ? base : base + ".vns");
+    if (f.exists()) return;
+    try (FileWriter fw = new FileWriter(f)) {
+      String scen = base.replaceAll("\\.vns$", "");
+      fw.write("# New VN Script\n" +
+               "@scenario " + scen + "\n\n" +
+               "@character narrator \"Narrator\"\n\n" +
+               "Narrator: Hello!\n\n" +
+               "[end]\n");
     } catch (Exception ignored) {}
     refresh();
     selectPath(f);

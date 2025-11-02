@@ -9,10 +9,14 @@ import java.nio.file.Files;
 import java.util.Properties;
 
 import com.jvn.core.scene2d.Entity2D;
+import com.jvn.core.vn.VnScenario;
+import com.jvn.core.vn.script.VnScriptParser;
 import com.jvn.editor.commands.CommandStack;
 import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.JesCodeEditor;
 import com.jvn.editor.ui.JavaCodeEditor;
+import com.jvn.editor.ui.VnsCodeEditor;
+import com.jvn.editor.ui.VnPreviewView;
 import com.jvn.editor.ui.ProjectExplorerView;
 import com.jvn.editor.ui.SceneGraphView;
 import com.jvn.editor.ui.ViewportView;
@@ -59,9 +63,13 @@ public class EditorApp extends Application {
   private TabPane tabs;
   private JesCodeEditor codeView;
   private JavaCodeEditor javaCodeView;
+  private VnsCodeEditor vnsCodeView;
+  private VnPreviewView vnView;
   private Tab tabCanvas;
   private Tab tabCode;
   private Tab tabJava;
+  private Tab tabVnsCode;
+  private Tab tabVnPreview;
   private boolean showGrid = true;
   
   private SceneGraphView sgView;
@@ -73,6 +81,21 @@ public class EditorApp extends Application {
 
   public static void main(String[] args) {
     launch(args);
+  }
+
+  private void doOpenVns(Stage stage) {
+    try {
+      FileChooser fc = new FileChooser();
+      fc.setTitle("Open VNS Script");
+      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("VNS scripts", "*.vns"));
+      File f = fc.showOpenDialog(stage);
+      if (f == null) return;
+      openVnsFile(f);
+    } catch (Exception ex) {
+      status.setText("Load failed");
+      Alert a = new Alert(Alert.AlertType.ERROR, "Failed to load: " + ex.getMessage());
+      a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+    }
   }
 
   private void doRunProject(Stage stage) {
@@ -250,6 +273,8 @@ public class EditorApp extends Application {
     miOpenProject.setOnAction(e -> doOpenProject(primaryStage));
     MenuItem miOpen = new MenuItem("Open JES...");
     miOpen.setOnAction(e -> doOpen(primaryStage));
+    MenuItem miOpenVns = new MenuItem("Open VNS...");
+    miOpenVns.setOnAction(e -> doOpenVns(primaryStage));
     MenuItem miReload = new MenuItem("Reload");
     miReload.setOnAction(e -> doReload());
     MenuItem miSave = new MenuItem("Save");
@@ -260,7 +285,7 @@ public class EditorApp extends Application {
     miReload.setAccelerator(new KeyCodeCombination(KeyCode.R, KeyCombination.SHORTCUT_DOWN));
     miSave.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
     miSaveAs.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
-    menuFile.getItems().addAll(miNewProject, miOpenProject, new SeparatorMenuItem(), miOpen, miReload, miSave, miSaveAs);
+    menuFile.getItems().addAll(miNewProject, miOpenProject, new SeparatorMenuItem(), miOpen, miOpenVns, miReload, miSave, miSaveAs);
 
     Menu menuCode = new Menu("Code");
     MenuItem miApplyCode = new MenuItem("Apply Code");
@@ -344,11 +369,15 @@ public class EditorApp extends Application {
     // Center: TabPane with Canvas and Code editors
     codeView = new JesCodeEditor();
     javaCodeView = new JavaCodeEditor();
+    vnsCodeView = new VnsCodeEditor();
+    vnView = new VnPreviewView();
     tabs = new TabPane();
     tabCanvas = new Tab("Canvas", viewport); tabCanvas.setClosable(false);
     tabCode = new Tab("JES Code", codeView); tabCode.setClosable(false);
     tabJava = new Tab("Java Code", javaCodeView); tabJava.setClosable(false);
-    tabs.getTabs().addAll(tabCanvas, tabCode, tabJava);
+    tabVnsCode = new Tab("VNS Code", vnsCodeView); tabVnsCode.setClosable(false);
+    tabVnPreview = new Tab("VN Preview", vnView); tabVnPreview.setClosable(false);
+    tabs.getTabs().addAll(tabCanvas, tabCode, tabJava, tabVnsCode, tabVnPreview);
     root.setCenter(tabs);
     inspectorView = new InspectorView(s -> status.setText(s));
     inspectorView.setCommandStack(commands);
@@ -366,6 +395,8 @@ public class EditorApp extends Application {
       String name = f.getName().toLowerCase();
       if (name.endsWith(".jes") || name.endsWith(".txt")) {
         openJesFile(f);
+      } else if (name.endsWith(".vns")) {
+        openVnsFile(f);
       } else if (name.endsWith(".java")) {
         openJavaFile(f);
       } else {
@@ -392,8 +423,8 @@ public class EditorApp extends Application {
     scene.addEventFilter(KeyEvent.KEY_RELEASED, e -> { if (tabs.getSelectionModel().getSelectedItem() == tabCanvas) viewport.getInput().keyUp(mapKey(e.getCode())); });
 
     // Resize handling
-    scene.widthProperty().addListener((o,ov,nv) -> viewport.setSize(nv.doubleValue(), viewport.getHeight()));
-    scene.heightProperty().addListener((o,ov,nv) -> viewport.setSize(viewport.getWidth(), nv.doubleValue() - 60));
+    scene.widthProperty().addListener((o,ov,nv) -> { viewport.setSize(nv.doubleValue(), viewport.getHeight()); if (vnView != null) vnView.setSize(nv.doubleValue(), vnView.getHeight()); });
+    scene.heightProperty().addListener((o,ov,nv) -> { viewport.setSize(viewport.getWidth(), nv.doubleValue() - 60); if (vnView != null) vnView.setSize(vnView.getWidth(), nv.doubleValue() - 60); });
 
     // Timer
     timer = new AnimationTimer() {
@@ -403,6 +434,7 @@ public class EditorApp extends Application {
         long dt = (now - last) / 1_000_000L;
         last = now;
         viewport.render(dt);
+        if (vnView != null) vnView.render(dt);
       }
     };
     timer.start();
@@ -457,11 +489,41 @@ public class EditorApp extends Application {
     }
   }
 
+  private void openVnsFile(File f) {
+    if (f == null) return;
+    try {
+      String code = Files.readString(f.toPath());
+      if (vnsCodeView != null) vnsCodeView.setText(code);
+      VnScriptParser parser = new VnScriptParser();
+      VnScenario scenario = parser.parse(new FileInputStream(f));
+      if (vnView != null) vnView.setScenario(scenario);
+      lastOpened = f;
+      status.setText("Loaded: " + f.getName());
+      tabs.getSelectionModel().select(tabVnPreview);
+    } catch (Exception ex) {
+      status.setText("Load failed: " + ex.getMessage());
+    }
+  }
+
   private void doReload() {
     if (lastOpened == null) return;
     String nm = lastOpened.getName().toLowerCase();
     if (nm.endsWith(".java")) {
       try { String code = Files.readString(lastOpened.toPath()); javaCodeView.setText(code); tabs.getSelectionModel().select(tabJava); status.setText("Reloaded: " + lastOpened.getName()); } catch (Exception ex) { status.setText("Reload failed"); }
+      return;
+    }
+    if (nm.endsWith(".vns")) {
+      try {
+        String code = Files.readString(lastOpened.toPath());
+        if (vnsCodeView != null) vnsCodeView.setText(code);
+        VnScriptParser parser = new VnScriptParser();
+        VnScenario scenario = parser.parse(new FileInputStream(lastOpened));
+        if (vnView != null) vnView.setScenario(scenario);
+        status.setText("Reloaded: " + lastOpened.getName());
+        tabs.getSelectionModel().select(tabVnPreview);
+      } catch (Exception ex) {
+        status.setText("Reload failed");
+      }
       return;
     }
     try (InputStream in = new FileInputStream(lastOpened)) {
@@ -482,19 +544,32 @@ public class EditorApp extends Application {
 
   private void applyCodeFromEditor() {
     try {
-      String code = codeView.getText();
-      if (code == null || code.isBlank()) return;
-      current = JesLoader.load(code);
-      if (current != null) {
-        current.setInput(viewport.getInput());
-        current.setCamera(viewport.getCamera());
-        viewport.setScene(current);
-        selected = null;
-        inspectorView.setScene(current);
-        inspectorView.setSelection(null);
-        buildSceneGraph();
-        status.setText("Applied code to scene");
-        tabs.getSelectionModel().selectFirst();
+      Tab sel = tabs.getSelectionModel().getSelectedItem();
+      if (sel == tabVnsCode || (lastOpened != null && lastOpened.getName().toLowerCase().endsWith(".vns"))) {
+        String vnsText = vnsCodeView.getText();
+        if (vnsText == null || vnsText.isBlank()) return;
+        VnScriptParser parser = new VnScriptParser();
+        VnScenario scenario = parser.parseFromString(vnsText);
+        if (vnView != null) {
+          vnView.setScenario(scenario);
+          status.setText("Applied VNS code");
+          tabs.getSelectionModel().select(tabVnPreview);
+        }
+      } else {
+        String code = codeView.getText();
+        if (code == null || code.isBlank()) return;
+        current = JesLoader.load(code);
+        if (current != null) {
+          current.setInput(viewport.getInput());
+          current.setCamera(viewport.getCamera());
+          viewport.setScene(current);
+          selected = null;
+          inspectorView.setScene(current);
+          inspectorView.setSelection(null);
+          buildSceneGraph();
+          status.setText("Applied code to scene");
+          tabs.getSelectionModel().selectFirst();
+        }
       }
     } catch (Exception ex) {
       status.setText("Apply failed");
@@ -509,6 +584,10 @@ public class EditorApp extends Application {
     try {
       if (nm.endsWith(".java")) {
         String content = javaCodeView.getText();
+        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
+        status.setText("Saved: " + lastOpened.getName());
+      } else if (nm.endsWith(".vns")) {
+        String content = vnsCodeView.getText();
         try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
         status.setText("Saved: " + lastOpened.getName());
       } else {
@@ -536,6 +615,11 @@ public class EditorApp extends Application {
       String nm = f.getName().toLowerCase();
       if (nm.endsWith(".java")) {
         String content = javaCodeView.getText();
+        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
+        lastOpened = f;
+        status.setText("Saved: " + f.getName());
+      } else if (nm.endsWith(".vns")) {
+        String content = vnsCodeView.getText();
         try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
         lastOpened = f;
         status.setText("Saved: " + f.getName());
