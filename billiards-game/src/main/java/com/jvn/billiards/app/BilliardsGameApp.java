@@ -39,13 +39,28 @@ public class BilliardsGameApp extends Application {
     // Try to import JES decorations (labels/timeline/bindings) from sample
     try {
       java.io.File wd = new java.io.File(System.getProperty("user.dir"));
-      java.io.File root = wd.getParentFile() != null ? wd.getParentFile() : wd;
-      java.io.File overlay = new java.io.File(root, "samples/billiards_overlay.jes");
-      java.io.File jes = overlay.exists() ? overlay : new java.io.File(root, "samples/billiards.jes");
+      java.util.List<java.io.File> roots = new java.util.ArrayList<>();
+      if (wd != null) roots.add(wd);
+      java.io.File parent = (wd == null ? null : wd.getParentFile());
+      if (parent != null) roots.add(parent);
+      java.io.File jes = null;
+      for (java.io.File r : roots) {
+        java.io.File o = new java.io.File(r, "samples/billiards_overlay.jes");
+        if (o.exists()) { jes = o; break; }
+        java.io.File f = new java.io.File(r, "samples/billiards.jes");
+        if (f.exists()) { jes = f; break; }
+      }
       if (jes != null && jes.exists()) {
         try (java.io.InputStream in = new java.io.FileInputStream(jes)) {
           JesScene2D s = JesLoader.load(in);
           scene2D.importFromJesScene(s, true);
+        }
+      } else {
+        try (java.io.InputStream res = BilliardsGameApp.class.getResourceAsStream("/samples/billiards_overlay.jes")) {
+          if (res != null) {
+            JesScene2D s = JesLoader.load(res);
+            scene2D.importFromJesScene(s, true);
+          }
         }
       }
     } catch (Exception ignore) {}

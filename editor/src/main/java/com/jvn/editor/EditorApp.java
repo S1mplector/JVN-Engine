@@ -131,10 +131,9 @@ public class EditorApp extends Application {
 
   private void runGradle(File root, String task, String[] args, String title) {
     File gradlew = new File(root, "gradlew");
-    if (!gradlew.exists()) { status.setText("gradlew not found in project root"); return; }
     try {
       java.util.List<String> cmd = new java.util.ArrayList<>();
-      cmd.add(gradlew.getAbsolutePath());
+      if (gradlew.exists()) cmd.add(gradlew.getAbsolutePath()); else cmd.add("gradle");
       cmd.add(task);
       if (args != null) java.util.Collections.addAll(cmd, args);
       ProcessBuilder pb = new ProcessBuilder(cmd);

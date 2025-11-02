@@ -4,12 +4,17 @@ plugins {
 
 allprojects {
   repositories {
+    mavenLocal()
     mavenCentral()
   }
 }
 
 subprojects {
   apply(plugin = "java")
+  apply(plugin = "maven-publish")
+
+  group = (findProperty("jvnGroup") as String?) ?: "com.jvn"
+  version = (findProperty("jvnVersion") as String?) ?: "0.1-SNAPSHOT"
 
   java {
     toolchain {
@@ -25,5 +30,25 @@ subprojects {
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     implementation("org.slf4j:slf4j-api:2.0.13")
+  }
+
+  configurations.all {
+    resolutionStrategy.dependencySubstitution {
+      substitute(module("com.jvn:core")).using(project(":core"))
+      substitute(module("com.jvn:fx")).using(project(":fx"))
+      substitute(module("com.jvn:scripting")).using(project(":scripting"))
+      substitute(module("com.jvn:audio-integration")).using(project(":audio-integration"))
+    }
+  }
+
+  publishing {
+    publications {
+      create<org.gradle.api.publish.maven.MavenPublication>("mavenJava") {
+        from(components["java"])
+        groupId = project.group.toString()
+        artifactId = project.name
+        version = project.version.toString()
+      }
+    }
   }
 }

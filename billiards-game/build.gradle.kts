@@ -4,11 +4,19 @@ plugins {
   id("org.openjfx.javafxplugin") version "0.0.13"
 }
 
+repositories {
+  mavenLocal()
+  mavenCentral()
+}
+
+val jvnGroup = (findProperty("jvnGroup") as String?) ?: "com.jvn"
+val jvnVersion = (findProperty("jvnVersion") as String?) ?: "0.1-SNAPSHOT"
+
 dependencies {
-  api(project(":core"))
-  implementation(project(":fx"))
-  implementation(project(":scripting"))
-  implementation(project(":audio-integration"))
+  api("${jvnGroup}:core:${jvnVersion}")
+  implementation("${jvnGroup}:fx:${jvnVersion}")
+  implementation("${jvnGroup}:scripting:${jvnVersion}")
+  implementation("${jvnGroup}:audio-integration:${jvnVersion}")
 }
 
 application {
