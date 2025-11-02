@@ -1,5 +1,10 @@
 # Java Vector Nexus Engine
 
+<div align="left">
+    <img src="docs/images/jvn_logo.png" width="128">
+    <br><br>
+</div>
+
 Modern, modular 2D game engine with a lightweight scene graph, simple physics, a custom DSL (JES) for content, and a JavaFX Editor for iteration.
 
 - Modules: `core`, `swing`, `fx`, `scripting`, `runtime`, `editor`
