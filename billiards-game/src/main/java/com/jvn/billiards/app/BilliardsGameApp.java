@@ -40,8 +40,9 @@ public class BilliardsGameApp extends Application {
     try {
       java.io.File wd = new java.io.File(System.getProperty("user.dir"));
       java.io.File root = wd.getParentFile() != null ? wd.getParentFile() : wd;
-      java.io.File jes = new java.io.File(root, "samples/billiards.jes");
-      if (jes.exists()) {
+      java.io.File overlay = new java.io.File(root, "samples/billiards_overlay.jes");
+      java.io.File jes = overlay.exists() ? overlay : new java.io.File(root, "samples/billiards.jes");
+      if (jes != null && jes.exists()) {
         try (java.io.InputStream in = new java.io.FileInputStream(jes)) {
           JesScene2D s = JesLoader.load(in);
           scene2D.importFromJesScene(s, true);

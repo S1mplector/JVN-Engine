@@ -1,0 +1,41 @@
+scene "billiards_overlay" {
+  // UI labels only; imported as screen-space overlay
+  entity "title" {
+    component Label2D {
+      text: "BILLIARDS"
+      x: 600
+      y: 36
+      size: 22
+      bold: true
+      color: rgb(1,1,1,1)
+      align: center
+    }
+  }
+  entity "turn" {
+    component Label2D {
+      text: "Player 1 - Open"
+      x: 20
+      y: 24
+      size: 14
+      bold: true
+      color: rgb(1,1,1,1)
+      align: left
+    }
+  }
+  entity "help" {
+    component Label2D {
+      text: "Tip: P to place cue (ball-in-hand)"
+      x: 20
+      y: 56
+      size: 14
+      bold: false
+      color: rgb(0.9,0.9,0.7,1)
+      align: left
+    }
+  }
+
+  // Bindings forwarded to Java via BilliardsHybridScene.setActionHandler
+  on key "P" do placeCue
+  on key "D" do toggleDebug
+  on key "M" do playSfx { name: "strike" }
+}

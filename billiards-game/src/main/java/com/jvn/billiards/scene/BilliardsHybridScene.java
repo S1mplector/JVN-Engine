@@ -22,6 +22,7 @@ public class BilliardsHybridScene extends JesScene2D {
   private double pixelsPerMeter = 200.0;
   private double originX = 0.0;
   private double originY = 0.0;
+  private boolean placingCue = false;
 
   public BilliardsHybridScene() {
     this.game = new BilliardsGame(BilliardsConfig.defaultEightBall(), new com.jvn.billiards.rules.EightBallRules());
@@ -33,9 +34,21 @@ public class BilliardsHybridScene extends JesScene2D {
     this.game.setListener(new com.jvn.billiards.api.BilliardsGameListener() {
       @Override public void onShotBegan(int playerIndex) { /* optional */ }
       @Override public void onBallPocketed(int playerIndex, int ballId) { audio.playSfx("pocket"); }
-      @Override public void onShotEnded(int playerIndex, com.jvn.billiards.api.ShotOutcome outcome, com.jvn.billiards.api.ShotStats stats) { /* optional */ }
-      @Override public void onTurnChanged(int playerIndex) { /* optional */ }
-      @Override public void onGameOver(int winningPlayerIndex) { audio.playSfx("win"); }
+      @Override public void onShotEnded(int playerIndex, com.jvn.billiards.api.ShotOutcome outcome, com.jvn.billiards.api.ShotStats stats) {
+        switch (outcome) {
+          case FOUL -> setLabel("help", "Foul - Ball in hand");
+          case TURN_SWITCH -> setLabel("help", "Turn switched");
+          case WIN -> setLabel("help", "Player " + (playerIndex + 1) + " wins!");
+          case LOSS -> setLabel("help", "Player " + (2 - playerIndex) + " wins!");
+          default -> {}
+        }
+      }
+      @Override public void onTurnChanged(int playerIndex) {
+        var g = game.getAssignedGroup(playerIndex);
+        String gtxt = (g == com.jvn.billiards.api.BallGroup.SOLID ? "Solids" : (g == com.jvn.billiards.api.BallGroup.STRIPE ? "Stripes" : "Open"));
+        setLabel("turn", "Player " + (playerIndex + 1) + " - " + gtxt);
+      }
+      @Override public void onGameOver(int winningPlayerIndex) { audio.playSfx("win"); setLabel("help", "Player " + (winningPlayerIndex + 1) + " wins!"); }
     });
 
     this.setActionHandler((action, props) -> {
@@ -53,12 +66,15 @@ public class BilliardsHybridScene extends JesScene2D {
       } else if ("playSfx".equalsIgnoreCase(action)) {
         Object name = props == null ? null : props.get("name");
         if (name != null) audio.playSfx(String.valueOf(name));
+      } else if ("placeCue".equalsIgnoreCase(action) || "togglePlaceCue".equalsIgnoreCase(action)) {
+        placingCue = !placingCue;
       }
     });
 
     this.registerCall("respawnCue", m -> game.getWorld().respawnCueDefault());
     this.registerCall("playSfx", m -> { Object n = m == null ? null : m.get("name"); if (n != null) audio.playSfx(String.valueOf(n)); });
     this.registerCall("setPower", m -> { double p = toNum(m == null ? null : m.get("p"), cue.getPower()); cue.setPower(p); });
+    this.registerCall("placeCue", m -> placingCue = true);
   }
 
   public BilliardsGame getGame() { return game; }
@@ -119,7 +135,20 @@ public class BilliardsHybridScene extends JesScene2D {
       if (in.wasKeyPressed("UP") || in.wasKeyPressed("W")) cue.setPower(cue.getPower() + 0.05);
       if (in.wasKeyPressed("DOWN") || in.wasKeyPressed("S")) cue.setPower(cue.getPower() - 0.05);
 
-      if (in.wasMousePressed(1) || in.wasKeyPressed("SPACE")) {
+      // Ball-in-hand placement takes priority
+      if (placingCue && in.wasMousePressed(1)) {
+        // place cue at mouse position (world coords), clamped to table bounds
+        var w = game.getWorld();
+        var cfg2 = w.getConfig();
+        double r = cfg2.ballRadius;
+        double px = Math.max(r, Math.min(cfg2.tableWidth - r, wx));
+        double py = Math.max(r, Math.min(cfg2.tableHeight - r, wy));
+        // ensure cue exists then set
+        w.respawnCueDefault();
+        var cueBody = w.getBall(BilliardsWorld.CUE_BALL);
+        if (cueBody != null) { cueBody.setVelocity(0,0); cueBody.setPosition(px, py); }
+        placingCue = false;
+      } else if (in.wasMousePressed(1) || in.wasKeyPressed("SPACE")) {
         game.beginShot();
         audio.playSfx("strike");
         cue.strike(game.getWorld(), game.getWorld().getConfig().breakSpeed);
@@ -165,6 +194,13 @@ public class BilliardsHybridScene extends JesScene2D {
     String gtxt = (g == com.jvn.billiards.api.BallGroup.SOLID ? "Solids" : (g == com.jvn.billiards.api.BallGroup.STRIPE ? "Stripes" : "Open Table"));
     String info = "Player " + (player + 1) + " - " + gtxt;
     b.drawText(info, 20, 24, 14, true);
+    if (placingCue) {
+      b.setFill(0, 0, 0, 0.6);
+      double bw = 240, bh = 30; double bx = 20, by = 40;
+      b.fillRect(bx - 8, by - 18, bw + 16, bh);
+      b.setFill(1, 1, 0.6, 1);
+      b.drawText("Ball-in-hand: Click to place", bx, by, 14, true);
+    }
   }
 
   public void importFromJesScene(JesScene2D src, boolean labelsOnly) {
@@ -181,6 +217,12 @@ public class BilliardsHybridScene extends JesScene2D {
       this.add(ent);
       this.registerEntity(e.getKey(), ent);
     }
+  }
+
+  private void setLabel(String name, String text) {
+    if (name == null) return;
+    Entity2D e = find(name);
+    if (e instanceof Label2D l) l.setText(text == null ? "" : text);
   }
 
   private static double toNum(Object v, double def) { return v instanceof Number n ? n.doubleValue() : def; }
