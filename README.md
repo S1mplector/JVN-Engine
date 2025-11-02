@@ -1,7 +1,7 @@
 # Java Vector Nexus Engine
 
 <div align="left">
-    <img src="docs/images/jvn_logo.png" width="128">
+    <img src="docs/images/jvn_logo.png" width="512">
     <br><br>
 </div>
 
