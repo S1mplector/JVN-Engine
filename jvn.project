@@ -1,0 +1,5 @@
+name=Billiards
+type=gradle
+path=:billiards-game
+task=run
+args=-x test

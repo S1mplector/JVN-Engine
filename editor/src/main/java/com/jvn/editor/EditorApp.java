@@ -1,15 +1,18 @@
 package com.jvn.editor;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.InputStream;
+import java.io.FileInputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.nio.file.Files;
+import java.util.Properties;
 
 import com.jvn.core.scene2d.Entity2D;
 import com.jvn.editor.commands.CommandStack;
 import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.JesCodeEditor;
+import com.jvn.editor.ui.JavaCodeEditor;
 import com.jvn.editor.ui.ProjectExplorerView;
 import com.jvn.editor.ui.SceneGraphView;
 import com.jvn.editor.ui.ViewportView;
@@ -55,8 +58,10 @@ public class EditorApp extends Application {
   // Input is owned by ViewportView
   private TabPane tabs;
   private JesCodeEditor codeView;
+  private JavaCodeEditor javaCodeView;
   private Tab tabCanvas;
   private Tab tabCode;
+  private Tab tabJava;
   private boolean showGrid = true;
   
   private SceneGraphView sgView;
@@ -70,27 +75,76 @@ public class EditorApp extends Application {
     launch(args);
   }
 
-  private void doRunGame(Stage stage) {
+  private void doRunProject(Stage stage) {
+    File root = ensureProjectRoot(stage);
+    if (root == null) return;
+    Properties mf = loadManifest(root);
+    if (mf == null) { status.setText("jvn.project not found"); return; }
+    String type = mf.getProperty("type", "gradle").trim();
+    if ("gradle".equalsIgnoreCase(type)) {
+      String path = mf.getProperty("path", ":billiards-game").trim();
+      String task = mf.getProperty("task", "run").trim();
+      String args = mf.getProperty("args", "-x test");
+      runGradle(root, composeGradleTask(path, task), args == null ? new String[]{} : args.split("\\s+"), "Run Project");
+    } else if ("jes".equalsIgnoreCase(type)) {
+      // For JES-only projects: open the entry script and set as project
+      String entry = mf.getProperty("entry", "scripts/main.jes");
+      File f = new File(root, entry);
+      if (f.exists()) openJesFile(f);
+      this.projectRoot = root;
+      if (projView != null) projView.setRootDirectory(root);
+      status.setText("Opened JES project: " + root.getName());
+    } else {
+      status.setText("Unknown project type: " + type);
+    }
+  }
+
+  private File ensureProjectRoot(Stage stage) {
     File root = this.projectRoot;
     if (root == null) {
       DirectoryChooser dc = new DirectoryChooser();
-      dc.setTitle("Select Project Root (contains gradlew)");
+      dc.setTitle("Select Project Root");
       root = dc.showDialog(stage);
-      if (root == null) return;
+      if (root == null) return null;
       this.projectRoot = root;
       if (projView != null) projView.setRootDirectory(root);
     }
+    return root;
+  }
+
+  private Properties loadManifest(File dir) {
+    try (FileInputStream fis = new FileInputStream(new File(dir, "jvn.project"))) {
+      Properties p = new Properties();
+      p.load(fis);
+      return p;
+    } catch (Exception ignore) { return null; }
+  }
+
+  private String composeGradleTask(String path, String task) {
+    String p = path == null ? "" : path.trim();
+    String t = task == null ? "run" : task.trim();
+    if (t.startsWith(":")) return t; // full task provided
+    if (p.isEmpty()) return t;
+    if (!p.startsWith(":")) p = ":" + p;
+    return p + ":" + t;
+  }
+
+  private void runGradle(File root, String task, String[] args, String title) {
     File gradlew = new File(root, "gradlew");
     if (!gradlew.exists()) { status.setText("gradlew not found in project root"); return; }
     try {
-      ProcessBuilder pb = new ProcessBuilder(gradlew.getAbsolutePath(), ":billiards-game:run", "-x", "test");
+      java.util.List<String> cmd = new java.util.ArrayList<>();
+      cmd.add(gradlew.getAbsolutePath());
+      cmd.add(task);
+      if (args != null) java.util.Collections.addAll(cmd, args);
+      ProcessBuilder pb = new ProcessBuilder(cmd);
       pb.directory(root);
       pb.redirectErrorStream(true);
       Process p = pb.start();
       javafx.stage.Stage logStage = new javafx.stage.Stage();
       javafx.scene.control.TextArea ta = new javafx.scene.control.TextArea();
       ta.setEditable(false);
-      logStage.setTitle("Run Billiards Game");
+      logStage.setTitle(title);
       logStage.setScene(new javafx.scene.Scene(new javafx.scene.layout.BorderPane(ta), 800, 500));
       logStage.show();
       Thread t = new Thread(() -> {
@@ -98,9 +152,7 @@ public class EditorApp extends Application {
           String line;
           while ((line = r.readLine()) != null) {
             String ln = line;
-            javafx.application.Platform.runLater(() -> {
-              ta.appendText(ln + "\n");
-            });
+            javafx.application.Platform.runLater(() -> ta.appendText(ln + "\n"));
           }
         } catch (Exception ignored) {}
       });
@@ -108,6 +160,45 @@ public class EditorApp extends Application {
       t.start();
     } catch (Exception ex) {
       status.setText("Run failed");
+    }
+  }
+
+  private void doNewProject(Stage stage) {
+    DirectoryChooser dc = new DirectoryChooser();
+    dc.setTitle("Choose Location for New Project");
+    File base = dc.showDialog(stage);
+    if (base == null) return;
+    javafx.scene.control.TextInputDialog nameDlg = new javafx.scene.control.TextInputDialog("MyProject");
+    nameDlg.setHeaderText(null); nameDlg.setTitle("New Project"); nameDlg.setContentText("Project name:");
+    var nameRes = nameDlg.showAndWait(); if (nameRes.isEmpty()) return; String name = nameRes.get().trim(); if (name.isEmpty()) return;
+    javafx.scene.control.ChoiceDialog<String> typeDlg = new javafx.scene.control.ChoiceDialog<>("jes", java.util.List.of("jes","gradle"));
+    typeDlg.setHeaderText(null); typeDlg.setTitle("Project Type"); typeDlg.setContentText("Type:");
+    var typeRes = typeDlg.showAndWait(); if (typeRes.isEmpty()) return; String type = typeRes.get();
+    File dir = new File(base, name); dir.mkdirs();
+    try {
+      Properties p = new Properties();
+      p.setProperty("name", name);
+      if ("jes".equalsIgnoreCase(type)) {
+        p.setProperty("type", "jes");
+        p.setProperty("entry", "scripts/main.jes");
+        new File(dir, "scripts").mkdirs();
+        try (FileWriter fw = new FileWriter(new File(dir, "scripts/main.jes"))) {
+          fw.write("scene \"" + name + "\" {\n  entity \"title\" {\n    component Label2D { text: \"Hello, JVN!\" x: 20 y: 24 size: 18 bold: true color: rgb(1,1,1,1) }\n  }\n  on key \"D\" do toggleDebug\n}\n");
+        }
+      } else {
+        p.setProperty("type", "gradle");
+        javafx.scene.control.TextInputDialog pathDlg = new javafx.scene.control.TextInputDialog(":app");
+        pathDlg.setHeaderText(null); pathDlg.setTitle("Gradle Module Path"); pathDlg.setContentText("Module path (e.g. :billiards-game):");
+        var pathRes = pathDlg.showAndWait(); if (pathRes.isEmpty()) return; String path = pathRes.get().trim();
+        p.setProperty("path", path);
+        p.setProperty("task", "run");
+        p.setProperty("args", "-x test");
+      }
+      try (FileOutputStream fos = new FileOutputStream(new File(dir, "jvn.project"))) { p.store(fos, "JVN Project Manifest"); }
+      this.projectRoot = dir; if (projView != null) projView.setRootDirectory(dir);
+      status.setText("Created project: " + name);
+    } catch (Exception ex) {
+      status.setText("Create project failed");
     }
   }
 
@@ -154,6 +245,8 @@ public class EditorApp extends Application {
     // Menu
     MenuBar mb = new MenuBar();
     Menu menuFile = new Menu("File");
+    MenuItem miNewProject = new MenuItem("New Project...");
+    miNewProject.setOnAction(e -> doNewProject(primaryStage));
     MenuItem miOpenProject = new MenuItem("Open Project...");
     miOpenProject.setOnAction(e -> doOpenProject(primaryStage));
     MenuItem miOpen = new MenuItem("Open JES...");
@@ -168,7 +261,7 @@ public class EditorApp extends Application {
     miReload.setAccelerator(new KeyCodeCombination(KeyCode.R, KeyCombination.SHORTCUT_DOWN));
     miSave.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
     miSaveAs.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
-    menuFile.getItems().addAll(miOpenProject, new SeparatorMenuItem(), miOpen, miReload, miSave, miSaveAs);
+    menuFile.getItems().addAll(miNewProject, miOpenProject, new SeparatorMenuItem(), miOpen, miReload, miSave, miSaveAs);
 
     Menu menuCode = new Menu("Code");
     MenuItem miApplyCode = new MenuItem("Apply Code");
@@ -191,8 +284,8 @@ public class EditorApp extends Application {
 
     Menu menuSamples = new Menu("Samples");
     Menu menuProject = new Menu("Project");
-    MenuItem miRun = new MenuItem("Run Billiards Game");
-    miRun.setOnAction(e -> doRunGame(primaryStage));
+    MenuItem miRun = new MenuItem("Run Project");
+    miRun.setOnAction(e -> doRunProject(primaryStage));
     menuProject.getItems().addAll(miRun);
     Menu menuEdit = new Menu("Edit");
     MenuItem miUndo = new MenuItem("Undo");
@@ -249,12 +342,14 @@ public class EditorApp extends Application {
     top.setTop(mb);
     top.setCenter(toolbar);
     root.setTop(top);
-    // Center: TabPane with Canvas and JES Code editor
+    // Center: TabPane with Canvas and Code editors
     codeView = new JesCodeEditor();
+    javaCodeView = new JavaCodeEditor();
     tabs = new TabPane();
     tabCanvas = new Tab("Canvas", viewport); tabCanvas.setClosable(false);
     tabCode = new Tab("JES Code", codeView); tabCode.setClosable(false);
-    tabs.getTabs().addAll(tabCanvas, tabCode);
+    tabJava = new Tab("Java Code", javaCodeView); tabJava.setClosable(false);
+    tabs.getTabs().addAll(tabCanvas, tabCode, tabJava);
     root.setCenter(tabs);
     inspectorView = new InspectorView(s -> status.setText(s));
     inspectorView.setCommandStack(commands);
@@ -272,6 +367,8 @@ public class EditorApp extends Application {
       String name = f.getName().toLowerCase();
       if (name.endsWith(".jes") || name.endsWith(".txt")) {
         openJesFile(f);
+      } else if (name.endsWith(".java")) {
+        openJavaFile(f);
       } else {
         try { java.awt.Desktop.getDesktop().open(f); } catch (Exception ignored) {}
       }
@@ -363,6 +460,11 @@ public class EditorApp extends Application {
 
   private void doReload() {
     if (lastOpened == null) return;
+    String nm = lastOpened.getName().toLowerCase();
+    if (nm.endsWith(".java")) {
+      try { String code = Files.readString(lastOpened.toPath()); javaCodeView.setText(code); tabs.getSelectionModel().select(tabJava); status.setText("Reloaded: " + lastOpened.getName()); } catch (Exception ex) { status.setText("Reload failed"); }
+      return;
+    }
     try (InputStream in = new FileInputStream(lastOpened)) {
       current = JesLoader.load(in);
       status.setText("Reloaded: " + lastOpened.getName());
@@ -403,14 +505,21 @@ public class EditorApp extends Application {
   }
 
   private void doSave(Stage stage) {
-    if (current == null) return;
     if (lastOpened == null) { doSaveAs(stage); return; }
+    String nm = lastOpened.getName().toLowerCase();
     try {
-      String sceneName = stripExt(lastOpened.getName());
-      String content = JesExporter.export(current, sceneName);
-      try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
-      if (codeView != null) codeView.setText(content);
-      status.setText("Saved: " + lastOpened.getName());
+      if (nm.endsWith(".java")) {
+        String content = javaCodeView.getText();
+        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
+        status.setText("Saved: " + lastOpened.getName());
+      } else {
+        if (current == null) return;
+        String sceneName = stripExt(lastOpened.getName());
+        String content = JesExporter.export(current, sceneName);
+        try (FileWriter fw = new FileWriter(lastOpened)) { fw.write(content); }
+        if (codeView != null) codeView.setText(content);
+        status.setText("Saved: " + lastOpened.getName());
+      }
     } catch (Exception ex) {
       status.setText("Save failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save: " + ex.getMessage());
@@ -419,28 +528,45 @@ public class EditorApp extends Application {
   }
 
   private void doSaveAs(Stage stage) {
-    if (current == null) return;
     try {
       FileChooser fc = new FileChooser();
-      fc.setTitle("Save JES Script");
-      fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("JES scripts", "*.jes", "*.txt"));
+      fc.setTitle("Save File");
       if (lastOpened != null) fc.setInitialFileName(lastOpened.getName());
       File f = fc.showSaveDialog(stage);
       if (f == null) return;
-      String fname = f.getName();
-      if (!(fname.endsWith(".jes") || fname.endsWith(".txt"))) {
-        f = new File(f.getAbsolutePath() + ".jes");
+      String nm = f.getName().toLowerCase();
+      if (nm.endsWith(".java")) {
+        String content = javaCodeView.getText();
+        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
+        lastOpened = f;
+        status.setText("Saved: " + f.getName());
+      } else {
+        if (!(nm.endsWith(".jes") || nm.endsWith(".txt"))) {
+          f = new File(f.getAbsolutePath() + ".jes");
+        }
+        String sceneName = stripExt(f.getName());
+        String content = JesExporter.export(current, sceneName);
+        try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
+        lastOpened = f;
+        if (codeView != null) codeView.setText(content);
+        status.setText("Saved: " + f.getName());
       }
-      String sceneName = stripExt(f.getName());
-      String content = JesExporter.export(current, sceneName);
-      try (FileWriter fw = new FileWriter(f)) { fw.write(content); }
-      lastOpened = f;
-      if (codeView != null) codeView.setText(content);
-      status.setText("Saved: " + f.getName());
     } catch (Exception ex) {
       status.setText("Save As failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to save as: " + ex.getMessage());
       a.setHeaderText(null); a.setTitle("Error"); a.showAndWait();
+    }
+  }
+
+  private void openJavaFile(File f) {
+    try {
+      String code = Files.readString(f.toPath());
+      javaCodeView.setText(code);
+      lastOpened = f;
+      tabs.getSelectionModel().select(tabJava);
+      status.setText("Loaded: " + f.getName());
+    } catch (Exception ex) {
+      status.setText("Open failed");
     }
   }
 
