@@ -41,13 +41,10 @@ subprojects {
     }
   }
 
-  publishing {
+  extensions.configure<org.gradle.api.publish.PublishingExtension> {
     publications {
-      create<org.gradle.api.publish.maven.MavenPublication>("mavenJava") {
+      create("mavenJava", org.gradle.api.publish.maven.MavenPublication::class.java) {
         from(components["java"])
-        groupId = project.group.toString()
-        artifactId = project.name
-        version = project.version.toString()
       }
     }
   }
