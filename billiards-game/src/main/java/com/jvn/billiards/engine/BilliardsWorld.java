@@ -20,6 +20,8 @@ public class BilliardsWorld {
   private final Set<RigidBody2D> pocketSensors = new HashSet<>();
   private final Set<Integer> pocketed = new HashSet<>();
   private Listener listener;
+  private double cueSpawnX;
+  private double cueSpawnY;
 
   public static final int CUE_BALL = 0;
   public static final int EIGHT_BALL = 8;
@@ -34,6 +36,18 @@ public class BilliardsWorld {
   public RigidBody2D getBall(int id) { return balls.get(id); }
   public Set<Integer> getPocketedBalls() { return new HashSet<>(pocketed); }
   public BilliardsConfig getConfig() { return cfg; }
+  public int getBallIdForBody(RigidBody2D body) { return bodyToId.getOrDefault(body, -1); }
+  public void respawnCueDefault() {
+    RigidBody2D cue = balls.get(CUE_BALL);
+    if (cue == null) return;
+    // If cue was pocketed, re-add it
+    if (!world.getBodies().contains(cue)) {
+      world.addBody(cue);
+      pocketed.remove(CUE_BALL);
+    }
+    cue.setVelocity(0, 0);
+    cue.setPosition(cueSpawnX, cueSpawnY);
+  }
   public boolean isAnyBallMoving(double speedThreshold) {
     double th = Math.max(0, speedThreshold);
     for (Map.Entry<Integer, RigidBody2D> e : balls.entrySet()) {
@@ -141,6 +155,7 @@ public class BilliardsWorld {
 
     double cueX = cfg.tableWidth * 0.25;
     double cueY = cy;
+    this.cueSpawnX = cueX; this.cueSpawnY = cueY;
     addBall(CUE_BALL, cueX, cueY, r);
   }
 

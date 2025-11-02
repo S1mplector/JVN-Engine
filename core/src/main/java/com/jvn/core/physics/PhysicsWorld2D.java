@@ -11,6 +11,7 @@ public class PhysicsWorld2D {
   private Rect bounds; // optional world bounds, null = unbounded
   private final List<Rect> staticRects = new ArrayList<>();
   private PhysicsSensorListener sensorListener;
+  private CollisionListener collisionListener;
 
   public static class RaycastHit {
     public RigidBody2D body;
@@ -25,11 +26,18 @@ public class PhysicsWorld2D {
     void onTrigger(RigidBody2D sensor, RigidBody2D other);
   }
 
+  public interface CollisionListener {
+    void onBodiesCollide(RigidBody2D a, RigidBody2D b, double nx, double ny);
+    void onBoundsCollide(RigidBody2D b, String side);
+    void onStaticCollide(RigidBody2D b, Rect tile, double nx, double ny);
+  }
+
   public void setGravity(double gx, double gy) { this.gravityX = gx; this.gravityY = gy; }
   public void setBounds(Rect bounds) { this.bounds = bounds; }
   public void addStaticRect(Rect r) { if (r != null) staticRects.add(r); }
   public void clearStaticRects() { staticRects.clear(); }
   public void setSensorListener(PhysicsSensorListener l) { this.sensorListener = l; }
+  public void setCollisionListener(CollisionListener l) { this.collisionListener = l; }
 
   public void addBody(RigidBody2D b) { if (b != null) bodies.add(b); }
   public void removeBody(RigidBody2D b) { bodies.remove(b); }
@@ -83,16 +91,16 @@ public class PhysicsWorld2D {
     if (bounds == null) return;
     if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
       var cir = b.getCircle();
-      if (cir.x - cir.r < bounds.left()) { cir.x = bounds.left() + cir.r; b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); }
-      if (cir.x + cir.r > bounds.right()) { cir.x = bounds.right() - cir.r; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); }
-      if (cir.y - cir.r < bounds.top()) { cir.y = bounds.top() + cir.r; b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); }
-      if (cir.y + cir.r > bounds.bottom()) { cir.y = bounds.bottom() - cir.r; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); }
+      if (cir.x - cir.r < bounds.left()) { cir.x = bounds.left() + cir.r; b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
+      if (cir.x + cir.r > bounds.right()) { cir.x = bounds.right() - cir.r; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
+      if (cir.y - cir.r < bounds.top()) { cir.y = bounds.top() + cir.r; b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
+      if (cir.y + cir.r > bounds.bottom()) { cir.y = bounds.bottom() - cir.r; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
     } else {
       var r = b.getAabb();
-      if (r.left() < bounds.left()) { r.x = bounds.left(); b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); }
-      if (r.right() > bounds.right()) { r.x = bounds.right() - r.w; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); }
-      if (r.top() < bounds.top()) { r.y = bounds.top(); b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); }
-      if (r.bottom() > bounds.bottom()) { r.y = bounds.bottom() - r.h; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); }
+      if (r.left() < bounds.left()) { r.x = bounds.left(); b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
+      if (r.right() > bounds.right()) { r.x = bounds.right() - r.w; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
+      if (r.top() < bounds.top()) { r.y = bounds.top(); b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
+      if (r.bottom() > bounds.bottom()) { r.y = bounds.bottom() - r.h; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
     }
   }
 
@@ -114,10 +122,12 @@ public class PhysicsWorld2D {
           double dir = (overlapX1 < overlapX2) ? 1 : -1;
           b.setPosition(b.getX() - dir * minOverlapX, b.getY());
           b.setVelocity(-dir * Math.abs(b.getVx()) * b.getRestitution(), b.getVy());
+          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, dir, 0);
         } else {
           double dir = (overlapY1 < overlapY2) ? 1 : -1;
           b.setPosition(b.getX(), b.getY() - dir * minOverlapY);
           b.setVelocity(b.getVx(), -dir * Math.abs(b.getVy()) * b.getRestitution());
+          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, 0, dir);
         }
       } else {
         Rect r = b.getAabb();
@@ -132,10 +142,12 @@ public class PhysicsWorld2D {
           double dir = (overlapX1 < overlapX2) ? 1 : -1;
           r.x -= dir * minOverlapX;
           b.setVelocity(-dir * Math.abs(b.getVx()) * b.getRestitution(), b.getVy());
+          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, dir, 0);
         } else {
           double dir = (overlapY1 < overlapY2) ? 1 : -1;
           r.y -= dir * minOverlapY;
           b.setVelocity(b.getVx(), -dir * Math.abs(b.getVy()) * b.getRestitution());
+          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, 0, dir);
         }
       }
     }
@@ -192,6 +204,7 @@ public class PhysicsWorld2D {
 
     ra.setVelocity(ra.getVx() + dvA * nx, ra.getVy() + dvA * ny);
     rb.setVelocity(rb.getVx() + dvB * nx, rb.getVy() + dvB * ny);
+    if (collisionListener != null) collisionListener.onBodiesCollide(ra, rb, nx, ny);
   }
 
   private void resolveAabbAabb(RigidBody2D a, RigidBody2D b) {
@@ -239,6 +252,7 @@ public class PhysicsWorld2D {
 
     a.setVelocity(a.getVx() + dvA * nx, a.getVy() + dvA * ny);
     b.setVelocity(b.getVx() + dvB * nx, b.getVy() + dvB * ny);
+    if (collisionListener != null) collisionListener.onBodiesCollide(a, b, nx, ny);
   }
 
   private RaycastHit raycastCircle(RigidBody2D body, double sx, double sy, double dx, double dy, double segLen) {

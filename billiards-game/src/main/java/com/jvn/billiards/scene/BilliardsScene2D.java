@@ -1,6 +1,7 @@
 package com.jvn.billiards.scene;
 
 import com.jvn.billiards.api.BilliardsConfig;
+import com.jvn.billiards.api.BallGroup;
 import com.jvn.billiards.engine.BilliardsGame;
 import com.jvn.billiards.engine.BilliardsWorld;
 import com.jvn.billiards.input.CueController;
@@ -69,7 +70,9 @@ public class BilliardsScene2D extends Scene2DBase {
 
         b.setStroke(1, 1, 0, 0.8);
         b.setStrokeWidth(0.01);
-        b.drawLine(bx, by, bx + ux * 0.6, by + uy * 0.6);
+        b.setDash(new double[]{0.04, 0.04}, 0);
+        b.drawLine(bx, by, bx + ux * 0.8, by + uy * 0.8);
+        b.setDash(null, 0);
       }
 
       // Power adjust: scroll or keys
@@ -114,5 +117,12 @@ public class BilliardsScene2D extends Scene2DBase {
     String v = String.format("%.0f%%", p * 100);
     double tw = b.measureTextWidth(v, 12, true);
     b.drawText(v, x + barW - tw, y - 6, 12, true);
+
+    // Player HUD
+    int player = game.getCurrentPlayer();
+    BallGroup g = game.getAssignedGroup(player);
+    String gtxt = (g == BallGroup.SOLID ? "Solids" : (g == BallGroup.STRIPE ? "Stripes" : "Open Table"));
+    String info = "Player " + (player + 1) + " - " + gtxt;
+    b.drawText(info, 20, 24, 14, true);
   }
 }
