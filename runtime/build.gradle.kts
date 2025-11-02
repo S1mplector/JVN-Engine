@@ -9,6 +9,10 @@ dependencies {
   implementation(project(":audio-integration"))
   // Include demo game so its resources (e.g., scripts, images) are on the runtime classpath
   implementation(project(":demo-game"))
+  // Include billiards game module
+  implementation(project(":billiards-game"))
+  // Include Swing UI backend
+  implementation(project(":swing"))
   runtimeOnly("ch.qos.logback:logback-classic:1.5.6")
 }
 

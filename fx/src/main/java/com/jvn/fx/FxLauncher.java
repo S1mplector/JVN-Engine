@@ -171,6 +171,15 @@ public class FxLauncher extends Application {
       } else if (e.getCode() == KeyCode.F10) {
         // F10 = Launch 2D demo scene (developer shortcut)
         if (engine != null) engine.scenes().push(new Example2DScene());
+      } else if (e.getCode() == KeyCode.F11) {
+        // F11 = Launch Billiards scene (developer shortcut via reflection)
+        try {
+          Class<?> cls = Class.forName("com.jvn.billiards.scene.BilliardsScene2D");
+          Object obj = cls.getDeclaredConstructor().newInstance();
+          if (obj instanceof com.jvn.core.scene2d.Scene2D s2d && engine != null) {
+            engine.scenes().push(s2d);
+          }
+        } catch (Throwable ignored) {}
       } else if (e.getCode() == KeyCode.DELETE) {
         handleMenuDelete();
       } else if (e.getCode() == KeyCode.R) {

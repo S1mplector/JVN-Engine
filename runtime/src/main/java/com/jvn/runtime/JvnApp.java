@@ -20,6 +20,8 @@ public class JvnApp {
     ApplicationConfig.Builder builder = ApplicationConfig.builder().title("JVN Runtime").width(960).height(540);
     String scriptName = "demo.vns"; // default script under game/scripts/
     String locale = "en";
+    boolean launchBilliards = false;
+    String ui = "fx"; // fx | swing
 
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
@@ -38,6 +40,12 @@ public class JvnApp {
           break;
         case "--locale":
           if (i + 1 < args.length) locale = args[++i];
+          break;
+        case "--billiards":
+          launchBilliards = true;
+          break;
+        case "--ui":
+          if (i + 1 < args.length) ui = args[++i];
           break;
         default:
           log.warn("Unknown argument: {}", a);
@@ -61,16 +69,29 @@ public class JvnApp {
       log.warn("Unable to list assets: {}", e.toString());
     }
     
-    // Create engine and show main menu
+    // Create engine and show scene
     Engine engine = new Engine(cfg);
     engine.start();
 
-    VnSettings settingsModel = new VnSettings();
-    VnSaveManager saveManager = new VnSaveManager();
-    FxAudioService audio = new FxAudioService();
-    MainMenuScene menu = new MainMenuScene(engine, settingsModel, saveManager, scriptName, audio);
-    engine.scenes().push(menu);
+    if (launchBilliards) {
+      try {
+        com.jvn.billiards.scene.BilliardsScene2D billiards = new com.jvn.billiards.scene.BilliardsScene2D();
+        engine.scenes().push(billiards);
+      } catch (Throwable t) {
+        log.warn("Failed to create BilliardsScene2D: {}", t.toString());
+      }
+    } else {
+      VnSettings settingsModel = new VnSettings();
+      VnSaveManager saveManager = new VnSaveManager();
+      FxAudioService audio = new FxAudioService();
+      MainMenuScene menu = new MainMenuScene(engine, settingsModel, saveManager, scriptName, audio);
+      engine.scenes().push(menu);
+    }
 
-    FxLauncher.launch(engine);
+    if ("swing".equalsIgnoreCase(ui)) {
+      com.jvn.swing.SwingLauncher.launch(engine);
+    } else {
+      FxLauncher.launch(engine);
+    }
   }
 }

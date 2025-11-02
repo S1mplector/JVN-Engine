@@ -29,5 +29,22 @@ public interface Blitter2D {
 
   void drawText(String text, double x, double y, double size, boolean bold);
   double measureTextWidth(String text, double size, boolean bold);
+
+  // Optional vector path API (default no-op) for advanced backends
+  default void beginPath() {}
+  default void moveTo(double x, double y) {}
+  default void lineTo(double x, double y) {}
+  default void closePath() {}
+  default void fillPath() {}
+  default void strokePath() {}
+
+  // Optional stroke settings
+  default void setStrokeCap(String cap) {}
+  default void setStrokeJoin(String join) {}
+  default void setMiterLimit(double limit) {}
+  default void setDash(double[] dashes, double phase) {}
+
+  // Optional clipping
+  default void setClipRect(double x, double y, double w, double h) {}
 }
 

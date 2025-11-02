@@ -21,5 +21,7 @@ include(
   ":audio-integration",
   ":editor",
   ":demo-game",
+  ":billiards-game",
+  ":swing",
   ":testkit"
 )
