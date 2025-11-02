@@ -40,6 +40,8 @@ public class JesParser {
     while (!match(RBRACE)) {
       if (match(IDENT) && "entity".equals(prev().lexeme)) {
         s.entities.add(parseEntity());
+      } else if (match(IDENT) && "on".equals(prev().lexeme)) {
+        s.bindings.add(parseBinding());
       } else if (prev().type == IDENT) {
         // scene-level prop: key : value
         String key = prev().lexeme;
@@ -51,6 +53,27 @@ public class JesParser {
       }
     }
     return s;
+  }
+
+  private JesAst.InputBinding parseBinding() {
+    // already consumed 'on'
+    expect(IDENT, "key"); // expect 'key'
+    String keyName = expect(STRING, "key name").lexeme;
+    expect(IDENT, "do"); // expect 'do'
+    String action = expect(IDENT, "action").lexeme;
+    JesAst.InputBinding b = new JesAst.InputBinding();
+    b.key = keyName; b.action = action;
+    if (match(LBRACE)) {
+      while (!match(RBRACE)) {
+        if (match(IDENT)) {
+          String k = prev().lexeme;
+          expect(COLON, ":");
+          Object v = parseValue();
+          b.props.put(k, v);
+        } else i++;
+      }
+    }
+    return b;
   }
 
   private JesAst.EntityDecl parseEntity() {
