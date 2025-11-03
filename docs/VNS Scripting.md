@@ -261,6 +261,13 @@ You can launch JES scenes (e.g., minigames) mid-VN and return with results.
     - Copy props into VN variables (except `label`/`goto`).
     - Jump to `label` (from props) or to the `label` specified in the `[jes push ... label L]` call.
 
+Notes:
+- Prop parsing for `with k=v` and `[jes call <name> k=v ...]` auto-coerces values:
+  - `true/false` → boolean
+  - numbers with `.` → double; integers otherwise
+  - anything else → string
+- Values cannot contain spaces; for multi-word values, encode them (e.g., `title=Hello_World`).
+
 ### End-to-end example
 
 VNS script:

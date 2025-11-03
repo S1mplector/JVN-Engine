@@ -61,6 +61,8 @@ public class JesScene2D extends Scene2DBase {
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
       try { h.accept(props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
+    } else if (actionHandler != null) {
+      try { actionHandler.accept(name, props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
     }
   }
   public boolean rename(String oldName, String newName) {
