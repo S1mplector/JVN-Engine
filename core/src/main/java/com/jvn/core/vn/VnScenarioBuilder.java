@@ -197,10 +197,31 @@ public class VnScenarioBuilder {
     return this;
   }
 
+  public VnScenarioBuilder fadeOutBgm() {
+    scenarioBuilder.addNode(
+      VnNode.builder(VnNodeType.JUMP)
+        .audioCommand(VnAudioCommand.builder(VnAudioCommand.AudioCommandType.FADE_OUT_BGM).build())
+        .build()
+    );
+    return this;
+  }
+
   public VnScenarioBuilder playSfx(String trackId) {
     scenarioBuilder.addNode(
       VnNode.builder(VnNodeType.JUMP)
         .audioCommand(VnAudioCommand.builder(VnAudioCommand.AudioCommandType.PLAY_SFX)
+          .trackId(trackId)
+          .loop(false)
+          .build())
+        .build()
+    );
+    return this;
+  }
+
+  public VnScenarioBuilder playVoice(String trackId) {
+    scenarioBuilder.addNode(
+      VnNode.builder(VnNodeType.JUMP)
+        .audioCommand(VnAudioCommand.builder(VnAudioCommand.AudioCommandType.PLAY_VOICE)
           .trackId(trackId)
           .loop(false)
           .build())

@@ -137,14 +137,46 @@ public class VnScriptParser {
           case "bgm_stop":
             builder.stopBgm();
             break;
+          case "bgm_fadeout":
+            builder.fadeOutBgm();
+            break;
           case "sfx":
             if (arg != null && !arg.isEmpty()) builder.playSfx(arg);
             break;
           case "voice":
             if (arg != null && !arg.isEmpty()) {
-              // Voice handled like SFX for now
-              builder.playSfx(arg);
+              builder.playVoice(arg);
             }
+            break;
+          case "volume":
+            if (arg != null && !arg.isEmpty()) builder.external("settings", "volume " + arg);
+            break;
+          case "textspeed":
+            if (arg != null && !arg.isEmpty()) builder.external("settings", "textspeed " + arg);
+            break;
+          case "autodelay":
+            if (arg != null && !arg.isEmpty()) builder.external("settings", "autodelay " + arg);
+            break;
+          case "hud":
+            if (arg != null && !arg.isEmpty()) builder.external("hud", arg);
+            break;
+          case "save":
+            builder.external("save", "");
+            break;
+          case "quickload":
+            builder.external("save", "quickload");
+            break;
+          case "skip":
+            builder.external("mode", "skip " + (arg == null ? "" : arg));
+            break;
+          case "auto":
+            builder.external("mode", "auto " + (arg == null ? "" : arg));
+            break;
+          case "ui":
+            builder.external("ui", arg == null ? "" : arg);
+            break;
+          case "history":
+            builder.external("history", arg == null ? "" : arg);
             break;
           case "wait":
             if (arg != null) {

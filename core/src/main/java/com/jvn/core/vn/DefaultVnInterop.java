@@ -36,6 +36,21 @@ public class DefaultVnInterop implements VnInterop {
       case "cond":
         boolean jumped = handleCond(payload, scene);
         return jumped ? VnInteropResult.stay() : VnInteropResult.advance();
+      case "settings":
+        handleSettings(payload, scene);
+        return VnInteropResult.advance();
+      case "save":
+        handleSave(payload, scene);
+        return VnInteropResult.advance();
+      case "mode":
+        handleMode(payload, scene);
+        return VnInteropResult.advance();
+      case "ui":
+        handleUi(payload, scene);
+        return VnInteropResult.advance();
+      case "history":
+        handleHistory(payload, scene);
+        return VnInteropResult.advance();
       default:
         scene.getState().showHudMessage("[call " + provider + "] " + payload, 1200);
         return VnInteropResult.advance();
@@ -134,6 +149,108 @@ public class DefaultVnInterop implements VnInterop {
     return false;
   }
 
+  private void handleSettings(String payload, VnScene scene) {
+    String[] toks = (payload == null ? "" : payload.trim()).split("\\s+");
+    if (toks.length == 0) return;
+    String cmd = toks[0].toLowerCase();
+    VnSettings s = scene.getState().getSettings();
+    switch (cmd) {
+      case "textspeed": {
+        if (toks.length >= 2) {
+          try { s.setTextSpeed(Integer.parseInt(toks[1])); } catch (Exception ignored) {}
+        }
+        break;
+      }
+      case "autodelay": {
+        if (toks.length >= 2) {
+          try { s.setAutoPlayDelay(Long.parseLong(toks[1])); } catch (Exception ignored) {}
+        }
+        break;
+      }
+      case "volume": {
+        if (toks.length >= 3) {
+          String which = toks[1].toLowerCase();
+          try {
+            float v = Float.parseFloat(toks[2]);
+            v = Math.max(0f, Math.min(1f, v));
+            if ("bgm".equals(which)) s.setBgmVolume(v);
+            else if ("sfx".equals(which)) s.setSfxVolume(v);
+            else if ("voice".equals(which)) s.setVoiceVolume(v);
+            if (scene.getAudioFacade() != null) {
+              if ("bgm".equals(which)) scene.getAudioFacade().setBgmVolume(s.getBgmVolume());
+              if ("sfx".equals(which)) scene.getAudioFacade().setSfxVolume(s.getSfxVolume());
+              if ("voice".equals(which)) scene.getAudioFacade().setVoiceVolume(s.getVoiceVolume());
+            }
+          } catch (Exception ignored) {}
+        }
+        break;
+      }
+    }
+  }
+
+  private void handleSave(String payload, VnScene scene) {
+    String p = payload == null ? "" : payload.trim().toLowerCase();
+    if (p.startsWith("quickload")) {
+      boolean ok = scene.quickLoad();
+      scene.getState().showHudMessage(ok ? "Loaded" : "No quick save", 1200);
+    } else {
+      boolean ok = scene.quickSave();
+      scene.getState().showHudMessage(ok ? "Saved" : "Save failed", 1200);
+    }
+  }
+
+  private void handleMode(String payload, VnScene scene) {
+    String[] toks = split(payload);
+    if (toks.length == 0) return;
+    String which = toks[0].toLowerCase();
+    String arg = toks.length >= 2 ? toks[1].toLowerCase() : "toggle";
+    switch (which) {
+      case "skip": {
+        if ("toggle".equals(arg)) scene.toggleSkipMode();
+        else {
+          boolean on = "on".equals(arg) || "true".equals(arg) || "1".equals(arg);
+          scene.getState().setSkipMode(on);
+          if (on) scene.getState().setAutoPlayMode(false);
+        }
+        break;
+      }
+      case "auto": {
+        if ("toggle".equals(arg)) scene.toggleAutoPlayMode();
+        else {
+          boolean on = "on".equals(arg) || "true".equals(arg) || "1".equals(arg);
+          scene.getState().setAutoPlayMode(on);
+          if (on) scene.getState().setSkipMode(false);
+        }
+        break;
+      }
+    }
+  }
+
+  private void handleUi(String payload, VnScene scene) {
+    String arg = (payload == null ? "" : payload.trim().toLowerCase());
+    if (arg.isEmpty() || "toggle".equals(arg)) { scene.getState().toggleUiHidden(); return; }
+    if ("hide".equals(arg) || "on".equals(arg)) { scene.getState().setUiHidden(true); return; }
+    if ("show".equals(arg) || "off".equals(arg)) { scene.getState().setUiHidden(false); }
+  }
+
+  private void handleHistory(String payload, VnScene scene) {
+    String[] toks = split(payload);
+    if (toks.length == 0) { scene.getState().toggleHistoryOverlay(); return; }
+    String cmd = toks[0].toLowerCase();
+    switch (cmd) {
+      case "toggle": scene.getState().toggleHistoryOverlay(); break;
+      case "show": scene.getState().setHistoryOverlayShown(true); break;
+      case "hide": scene.getState().setHistoryOverlayShown(false); break;
+      case "scroll": {
+        if (toks.length >= 2) {
+          try { int d = Integer.parseInt(toks[1]); scene.getState().scrollHistoryByLines(d); } catch (Exception ignored) {}
+        }
+        break;
+      }
+      case "clear": scene.getState().clearHistoryScroll(); break;
+    }
+  }
+
   private boolean compare(Object lhs, String op, String rhsRaw) {
     Object rhs = parseScalar(rhsRaw);
     if (lhs instanceof Number ln && rhs instanceof Number rn) {
@@ -216,4 +333,8 @@ public class DefaultVnInterop implements VnInterop {
   }
 
   private static String safe(String s) { return s == null ? "" : s; }
+  private static String[] split(String s) {
+    String t = safe(s).trim();
+    return t.isEmpty() ? new String[0] : t.split("\\s+");
+  }
 }
