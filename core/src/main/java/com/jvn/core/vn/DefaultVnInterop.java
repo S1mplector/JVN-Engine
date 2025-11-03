@@ -51,6 +51,9 @@ public class DefaultVnInterop implements VnInterop {
       case "history":
         handleHistory(payload, scene);
         return VnInteropResult.advance();
+      case "audio":
+        handleAudio(payload, scene);
+        return VnInteropResult.advance();
       default:
         scene.getState().showHudMessage("[call " + provider + "] " + payload, 1200);
         return VnInteropResult.advance();
@@ -248,6 +251,36 @@ public class DefaultVnInterop implements VnInterop {
         break;
       }
       case "clear": scene.getState().clearHistoryScroll(); break;
+    }
+  }
+
+  private void handleAudio(String payload, VnScene scene) {
+    String[] toks = split(payload);
+    if (toks.length == 0) return;
+    String cmd = toks[0].toLowerCase();
+    var a = scene.getAudioFacade(); if (a == null) return;
+    switch (cmd) {
+      case "pause":
+        a.pauseBgm();
+        break;
+      case "resume":
+        a.resumeBgm();
+        break;
+      case "seek":
+        if (toks.length >= 2) {
+          try { a.seekBgmSeconds(Double.parseDouble(toks[1])); } catch (Exception ignored) {}
+        }
+        break;
+      case "crossfade":
+        if (toks.length >= 3) {
+          String track = toks[1];
+          try {
+            long ms = Long.parseLong(toks[2]);
+            boolean loop = toks.length >= 4 && ("true".equalsIgnoreCase(toks[3]) || "on".equalsIgnoreCase(toks[3]) || "1".equals(toks[3]));
+            a.crossfadeBgm(track, ms, loop);
+          } catch (Exception ignored) {}
+        }
+        break;
     }
   }
 

@@ -106,6 +106,16 @@ Supported commands:
 [voice <path-or-id>]   # plays voice (dedicated voice channel when available; falls back to SFX)
 ```
 
+- Advanced audio controls
+```
+[bgm_pause]                      # pause current BGM
+[bgm_resume]                     # resume paused BGM
+[bgm_seek <seconds>]             # seek current BGM position
+[bgm_crossfade <id> <ms> [loop]] # crossfade from current BGM to <id> over <ms>; optional loop
+```
+Notes:
+- Crossfade requires backend support. The default FX backend swaps instantly; the Simp3 backend enables timed crossfades.
+
 - Timing
 ```
 [wait <millis>]

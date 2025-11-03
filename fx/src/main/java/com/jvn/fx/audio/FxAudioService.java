@@ -99,6 +99,27 @@ public class FxAudioService implements AudioFacade {
     this.voiceVolume = volume;
   }
 
+  @Override
+  public void pauseBgm() {
+    try { if (bgmPlayer != null) bgmPlayer.pause(); } catch (Exception ignored) {}
+  }
+
+  @Override
+  public void resumeBgm() {
+    try { if (bgmPlayer != null) { bgmPlayer.setVolume(clamp(bgmVolume)); bgmPlayer.play(); } } catch (Exception ignored) {}
+  }
+
+  @Override
+  public void seekBgmSeconds(double seconds) {
+    try { if (bgmPlayer != null && seconds >= 0) bgmPlayer.seek(javafx.util.Duration.seconds(seconds)); } catch (Exception ignored) {}
+  }
+
+  @Override
+  public void crossfadeBgm(String trackId, long ms, boolean loop) {
+    // Fallback: immediate swap to new BGM; no timed crossfade in pure FX backend
+    playBgm(trackId, loop);
+  }
+
   private double clamp(float v) {
     if (v < 0f) return 0.0;
     if (v > 1f) return 1.0;

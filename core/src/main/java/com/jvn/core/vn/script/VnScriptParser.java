@@ -144,6 +144,18 @@ public class VnScriptParser {
               builder.fadeOutBgm();
             }
             break;
+          case "bgm_pause":
+            builder.external("audio", "pause");
+            break;
+          case "bgm_resume":
+            builder.external("audio", "resume");
+            break;
+          case "bgm_seek":
+            if (arg != null && !arg.isEmpty()) builder.external("audio", "seek " + arg);
+            break;
+          case "bgm_crossfade":
+            if (arg != null && !arg.isEmpty()) builder.external("audio", "crossfade " + arg);
+            break;
           case "sfx":
             if (arg != null && !arg.isEmpty()) builder.playSfx(arg);
             break;

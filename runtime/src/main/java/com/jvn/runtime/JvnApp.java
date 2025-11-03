@@ -10,6 +10,7 @@ import com.jvn.core.localization.Localization;
 import com.jvn.core.menu.MainMenuScene;
 import com.jvn.fx.FxLauncher;
 import com.jvn.fx.audio.FxAudioService;
+import com.jvn.core.audio.AudioFacade;
 import com.jvn.scripting.jes.JesLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ public class JvnApp {
     String locale = "en";
     boolean launchBilliards = false;
     String ui = "fx"; // fx | swing
+    String audioBackend = "fx"; // fx | simp3 | auto
     String jesScript = null;
 
     for (int i = 0; i < args.length; i++) {
@@ -53,6 +55,9 @@ public class JvnApp {
           break;
         case "--jes":
           if (i + 1 < args.length) jesScript = args[++i];
+          break;
+        case "--audio":
+          if (i + 1 < args.length) audioBackend = args[++i];
           break;
         default:
           log.warn("Unknown argument: {}", a);
@@ -107,7 +112,19 @@ public class JvnApp {
     } else {
       VnSettings settingsModel = new VnSettings();
       VnSaveManager saveManager = new VnSaveManager();
-      FxAudioService audio = new FxAudioService();
+      AudioFacade audio = null;
+      if ("simp3".equalsIgnoreCase(audioBackend) || "auto".equalsIgnoreCase(audioBackend)) {
+        try {
+          Class<?> cls = Class.forName("com.jvn.audio.simp3.Simp3AudioService");
+          Object inst = cls.getDeclaredConstructor().newInstance();
+          audio = (AudioFacade) inst;
+        } catch (Throwable t) {
+          // Fallback to FX if adapter not on classpath
+          audio = new FxAudioService();
+        }
+      } else {
+        audio = new FxAudioService();
+      }
       MainMenuScene menu = new MainMenuScene(engine, settingsModel, saveManager, scriptName, audio);
       engine.scenes().push(menu);
     }

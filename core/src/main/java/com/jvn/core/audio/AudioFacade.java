@@ -8,4 +8,9 @@ public interface AudioFacade {
   default void setBgmVolume(float volume) {}
   default void setSfxVolume(float volume) {}
   default void setVoiceVolume(float volume) {}
+  // Optional advanced controls; implement if backend supports them
+  default void pauseBgm() {}
+  default void resumeBgm() {}
+  default void seekBgmSeconds(double seconds) {}
+  default void crossfadeBgm(String trackId, long ms, boolean loop) {}
 }
