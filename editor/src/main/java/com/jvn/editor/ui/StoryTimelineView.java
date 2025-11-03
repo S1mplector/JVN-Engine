@@ -20,10 +20,14 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.ScrollPane;
 import javafx.stage.FileChooser;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.TransferMode;
+import javafx.scene.input.Dragboard;
 
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.function.Consumer;
 
 public class StoryTimelineView extends BorderPane {
@@ -31,6 +35,7 @@ public class StoryTimelineView extends BorderPane {
     public String name;
     public String script;
     public String entryLabel;
+    public String cluster;
     public double x = 40;
     public double y = 40;
     public String toLine() { return "ARC|" + nn(name) + "|" + nn(script) + "|" + nn(entryLabel) + "|" + x + "|" + y; }
@@ -97,6 +102,7 @@ public class StoryTimelineView extends BorderPane {
   private File projectRoot;
   private Consumer<Arc> onRunArc;
   private Consumer<Link> onRunLink;
+  private Runnable onChanged;
 
   public StoryTimelineView() {
     arcs.setCellFactory(v -> new ListCell<>() {
@@ -125,36 +131,17 @@ public class StoryTimelineView extends BorderPane {
     rootSplit.setDividerPositions(0.55);
     setCenter(rootSplit);
 
-    Button bAddArc = new Button("Add Arc");
-    bAddArc.setOnAction(e -> addArc());
-    Button bRemoveArc = new Button("Remove Arc");
-    bRemoveArc.setOnAction(e -> { Arc a = arcs.getSelectionModel().getSelectedItem(); if (a != null) arcs.getItems().remove(a); });
-    Button bAddLink = new Button("Add Link");
-    bAddLink.setOnAction(e -> addLink());
-    Button bRemoveLink = new Button("Remove Link");
-    bRemoveLink.setOnAction(e -> { Link l = links.getSelectionModel().getSelectedItem(); if (l != null) links.getItems().remove(l); });
-    Button bOpenArc = new Button("Open Arc");
-    bOpenArc.setOnAction(e -> openArc());
-    Button bRunArc = new Button("Run Arc");
-    bRunArc.setOnAction(e -> { Arc a = arcs.getSelectionModel().getSelectedItem(); if (a != null && onRunArc != null) onRunArc.accept(a); });
-    Button bRunLink = new Button("Run Link");
-    bRunLink.setOnAction(e -> { Link l = links.getSelectionModel().getSelectedItem(); if (l != null && onRunLink != null) onRunLink.accept(l); });
-    Button bCopyGoto = new Button("Copy Goto");
-    bCopyGoto.setOnAction(e -> copyGoto());
-    Button bSave = new Button("Save");
-    bSave.setOnAction(e -> save());
-    Button bLoad = new Button("Load");
-    bLoad.setOnAction(e -> load());
-    Button bValidate = new Button("Validate");
-    bValidate.setOnAction(e -> validate());
+    Button bAddArc = new Button("Add Arc"); bAddArc.setOnAction(e -> addArc());
+    Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
+    Button bValidate = new Button("Validate"); bValidate.setOnAction(e -> validate());
     TextField tfSearch = new TextField(); tfSearch.setPromptText("Search arcs...");
     tfSearch.textProperty().addListener((o, ov, nv) -> graph.highlight(nv));
-    Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
     zoomSlider = new Slider(0.6, 2.0, 1.0); zoomSlider.setPrefWidth(120);
     zoomSlider.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
     FlowPane actions = new FlowPane(6, 6);
     actions.setPadding(new Insets(6));
-    actions.getChildren().addAll(bAddArc, bRemoveArc, bAddLink, bRemoveLink, bOpenArc, bRunArc, bRunLink, bCopyGoto, new Label("Zoom"), zoomSlider, tfSearch, bAuto, bSave, bLoad, bValidate);
+    // Minimal toolbar: Add Arc, Search, Auto Layout, Validate (zoom via Ctrl/Cmd + wheel)
+    actions.getChildren().addAll(bAddArc, tfSearch, bAuto, bValidate);
     // Wrap to new rows instead of squeezing buttons to tiny squares
     actions.prefWrapLengthProperty().bind(widthProperty().subtract(24));
     setTop(actions);
@@ -162,6 +149,10 @@ public class StoryTimelineView extends BorderPane {
     // Graph actions wiring
     graph.setOnRunArc(a -> { if (onRunArc != null) onRunArc.accept(a); });
     graph.setOnRunLink(l -> { if (onRunLink != null) onRunLink.accept(l); });
+    graph.setOnGraphChanged(this::onGraphChanged);
+    graph.setOnLayoutCommitted(this::save);
+    graph.setOnDeleteArc(a -> { if (a != null) { removeArcAndLinks(a.name); refreshGraph(); save(); } });
+    graph.setSimpleLinkMode(true);
     arcs.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) -> {
       if (nv != null) graph.highlight(nv.name);
     });
@@ -176,6 +167,28 @@ public class StoryTimelineView extends BorderPane {
         e.consume();
       }
     });
+
+    // Drag-and-drop .vns files onto graph to create arcs
+    graph.setOnDragOver(e -> {
+      Dragboard db = e.getDragboard();
+      if (db.hasFiles()) {
+        boolean ok = db.getFiles().stream().anyMatch(f -> f.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".vns"));
+        if (ok) { e.acceptTransferModes(TransferMode.COPY); e.consume(); }
+      }
+    });
+    graph.setOnDragDropped(e -> {
+      Dragboard db = e.getDragboard();
+      boolean success = false;
+      if (db.hasFiles()) {
+        for (File f : db.getFiles()) {
+          String name = f.getName().toLowerCase(java.util.Locale.ROOT);
+          if (!name.endsWith(".vns")) continue;
+          addArcFromFile(f);
+          success = true;
+        }
+      }
+      e.setDropCompleted(success); e.consume();
+    });
   }
 
   public void setProjectRoot(File dir) {
@@ -186,6 +199,7 @@ public class StoryTimelineView extends BorderPane {
 
   public void setOnRunArc(Consumer<Arc> c) { this.onRunArc = c; }
   public void setOnRunLink(Consumer<Link> c) { this.onRunLink = c; }
+  public void setOnChanged(Runnable r) { this.onChanged = r; }
   public List<Arc> getArcs() { return new ArrayList<>(arcs.getItems()); }
   public List<Link> getLinks() { return new ArrayList<>(links.getItems()); }
   public Arc findArc(String name) {
@@ -246,8 +260,7 @@ public class StoryTimelineView extends BorderPane {
     if (projectRoot == null) return;
     File f = new File(projectRoot, "story.timeline");
     try (PrintWriter pw = new PrintWriter(new FileWriter(f))) {
-      for (Arc a : arcs.getItems()) pw.println(a.toLine());
-      for (Link l : links.getItems()) pw.println(l.toLine());
+      pw.print(toDsl());
     } catch (Exception ignored) {}
   }
 
@@ -255,30 +268,10 @@ public class StoryTimelineView extends BorderPane {
     if (projectRoot == null) return;
     File f = new File(projectRoot, "story.timeline");
     if (!f.exists()) return;
-    List<Arc> alist = new ArrayList<>();
-    List<Link> llist = new ArrayList<>();
-    try (BufferedReader br = new BufferedReader(new FileReader(f))) {
-      String line;
-      while ((line = br.readLine()) != null) {
-        if (line.startsWith("ARC|")) {
-          String[] t = line.split("\\|", -1);
-          if (t.length >= 4) {
-            Arc a = new Arc(); a.name = n(t[1]); a.script = n(t[2]); a.entryLabel = n(t[3]);
-            if (t.length >= 6) {
-              try { a.x = Double.parseDouble(t[4]); } catch (Exception ignore) {}
-              try { a.y = Double.parseDouble(t[5]); } catch (Exception ignore) {}
-            }
-            alist.add(a);
-          }
-        } else if (line.startsWith("LINK|")) {
-          String[] t = line.split("\\|", -1);
-          if (t.length >= 5) { Link l = new Link(); l.fromArc = n(t[1]); l.fromLabel = n(t[2]); l.toArc = n(t[3]); l.toLabel = n(t[4]); llist.add(l); }
-        }
-      }
+    try {
+      String text = java.nio.file.Files.readString(f.toPath());
+      fromText(text);
     } catch (Exception ignored) {}
-    arcs.getItems().setAll(alist);
-    links.getItems().setAll(llist);
-    refreshGraph();
   }
 
   private static String nn(String s) { return s == null ? "" : s; }
@@ -309,5 +302,114 @@ public class StoryTimelineView extends BorderPane {
 
   private void refreshGraph() {
     graph.setModel(arcs.getItems(), links.getItems());
+  }
+
+  private void onGraphChanged() {
+    // sync list views with graph model and save
+    arcs.refresh(); links.refresh();
+    save();
+    if (onChanged != null) onChanged.run();
+  }
+
+  private void removeArcAndLinks(String arcName) {
+    if (arcName == null) return;
+    Arc target = null;
+    for (Arc a : arcs.getItems()) { if (a != null && arcName.equals(a.name)) { target = a; break; } }
+    if (target != null) arcs.getItems().remove(target);
+    links.getItems().removeIf(l -> arcName.equals(l.fromArc) || arcName.equals(l.toArc));
+  }
+
+  private void addArcFromFile(File f) {
+    if (f == null) return;
+    TextInputDialog dlg = new TextInputDialog(stripExt(f.getName()));
+    dlg.setHeaderText(null); dlg.setTitle("Arc Name"); dlg.setContentText("Name:");
+    var res = dlg.showAndWait(); if (res.isEmpty()) return; String name = res.get().trim(); if (name.isEmpty()) return;
+    TextInputDialog ldlg = new TextInputDialog("");
+    ldlg.setHeaderText(null); ldlg.setTitle("Entry Label"); ldlg.setContentText("Label (optional):");
+    var lres = ldlg.showAndWait(); String label = lres.isEmpty() ? "" : lres.get().trim();
+    Arc a = new Arc(); a.name = name; a.script = toRelative(f); a.entryLabel = label;
+    arcs.getItems().add(a);
+    refreshGraph(); save();
+  }
+
+  private static String stripExt(String n) {
+    if (n == null) return "Arc"; int i = n.lastIndexOf('.'); return (i>0) ? n.substring(0,i) : n;
+  }
+
+  public String toDsl() {
+    StringBuilder sb = new StringBuilder();
+    for (Arc a : arcs.getItems()) {
+      if (a == null) continue;
+      sb.append("arc \"").append(nn(a.name)).append("\"");
+      if (a.script != null && !a.script.isBlank()) sb.append(" script \"").append(nn(a.script)).append("\"");
+      if (a.entryLabel != null && !a.entryLabel.isBlank()) sb.append(" entry \"").append(nn(a.entryLabel)).append("\"");
+      if (a.cluster != null && !a.cluster.isBlank()) sb.append(" cluster \"").append(nn(a.cluster)).append("\"");
+      sb.append(" at ").append(a.x).append(",").append(a.y);
+      sb.append("\n");
+    }
+    for (Link l : links.getItems()) {
+      if (l == null) continue;
+      String fl = (l.fromLabel == null || l.fromLabel.isBlank()) ? nn(l.fromArc) : (nn(l.fromArc) + ":" + nn(l.fromLabel));
+      String tl = (l.toLabel == null || l.toLabel.isBlank()) ? nn(l.toArc) : (nn(l.toArc) + ":" + nn(l.toLabel));
+      sb.append("link ").append(fl).append(" -> ").append(tl).append("\n");
+    }
+    return sb.toString();
+  }
+
+  public void fromText(String text) {
+    List<Arc> alist = new ArrayList<>();
+    List<Link> llist = new ArrayList<>();
+    if (text == null) text = "";
+    String[] lines = text.split("\r?\n");
+    Pattern parc = Pattern.compile("^\\s*arc\\s+(?:\"([^\"]+)\"|(\\S+))(?:\\s+script\\s+\"([^\"]+)\")?(?:\\s+entry\\s+\"([^\"]*)\")?(?:\\s+cluster\\s+\"([^\"]+)\")?(?:\\s+at\\s+(-?\\d+(?:\\.\\d+)?),\\s*(-?\\d+(?:\\.\\d+)?))?\\s*$", Pattern.CASE_INSENSITIVE);
+    Pattern plink = Pattern.compile("^\\s*link\\s+([^\\s]+)\\s*->\\s*([^\\s]+)\\s*$", Pattern.CASE_INSENSITIVE);
+    for (String line : lines) {
+      if (line == null) continue;
+      String s = line.trim();
+      if (s.isEmpty() || s.startsWith("#")) continue;
+      if (s.startsWith("ARC|")) {
+        String[] t = s.split("\\|", -1);
+        if (t.length >= 4) {
+          Arc a = new Arc(); a.name = n(t[1]); a.script = n(t[2]); a.entryLabel = n(t[3]);
+          if (t.length >= 6) {
+            try { a.x = Double.parseDouble(t[4]); } catch (Exception ignore) {}
+            try { a.y = Double.parseDouble(t[5]); } catch (Exception ignore) {}
+          }
+          alist.add(a);
+        }
+        continue;
+      }
+      if (s.startsWith("LINK|")) {
+        String[] t = s.split("\\|", -1);
+        if (t.length >= 5) { Link l = new Link(); l.fromArc = n(t[1]); l.fromLabel = n(t[2]); l.toArc = n(t[3]); l.toLabel = n(t[4]); llist.add(l); }
+        continue;
+      }
+      Matcher ma = parc.matcher(s);
+      if (ma.matches()) {
+        Arc a = new Arc();
+        a.name = ma.group(1) != null ? ma.group(1) : ma.group(2);
+        a.script = nn(ma.group(3));
+        a.entryLabel = nn(ma.group(4));
+        a.cluster = nn(ma.group(5));
+        if (ma.group(6) != null && ma.group(7) != null) {
+          try { a.x = Double.parseDouble(ma.group(6)); } catch (Exception ignore) {}
+          try { a.y = Double.parseDouble(ma.group(7)); } catch (Exception ignore) {}
+        }
+        alist.add(a);
+        continue;
+      }
+      Matcher ml = plink.matcher(s);
+      if (ml.matches()) {
+        String left = ml.group(1);
+        String right = ml.group(2);
+        Link l = new Link();
+        int ci = left.indexOf(':');
+        if (ci >= 0) { l.fromArc = left.substring(0,ci); l.fromLabel = left.substring(ci+1); } else { l.fromArc = left; l.fromLabel = ""; }
+        ci = right.indexOf(':');
+        if (ci >= 0) { l.toArc = right.substring(0,ci); l.toLabel = right.substring(ci+1); } else { l.toArc = right; l.toLabel = ""; }
+        llist.add(l);
+      }
+    }
+    arcs.getItems().setAll(alist); links.getItems().setAll(llist); refreshGraph();
   }
 }

@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 public class FileEditorTab extends BorderPane {
-  public enum Kind { JES, VNS, JAVA, OTHER }
+  public enum Kind { JES, VNS, JAVA, TIMELINE, OTHER }
 
   private final File file;
   private final Kind kind;
@@ -27,6 +27,8 @@ public class FileEditorTab extends BorderPane {
   private final JesCodeEditor jesEditor;
   private final VnsCodeEditor vnsEditor;
   private final JavaCodeEditor javaEditor;
+  private final TimelineCodeEditor timelineEditor;
+  private final StoryTimelineView timelineView;
 
   private final ViewportView viewport; // JES preview
   private JesScene2D jesScene;
@@ -44,11 +46,14 @@ public class FileEditorTab extends BorderPane {
     if (name.endsWith(".jes") || name.endsWith(".txt")) this.kind = Kind.JES;
     else if (name.endsWith(".vns")) this.kind = Kind.VNS;
     else if (name.endsWith(".java")) this.kind = Kind.JAVA;
+    else if (name.endsWith(".timeline")) this.kind = Kind.TIMELINE;
     else this.kind = Kind.OTHER;
 
     this.jesEditor = (kind == Kind.JES) ? new JesCodeEditor() : null;
     this.vnsEditor = (kind == Kind.VNS) ? new VnsCodeEditor() : null;
     this.javaEditor = (kind == Kind.JAVA) ? new JavaCodeEditor() : null;
+    this.timelineEditor = (kind == Kind.TIMELINE) ? new TimelineCodeEditor() : null;
+    this.timelineView = (kind == Kind.TIMELINE) ? new StoryTimelineView() : null;
 
     this.viewport = (kind == Kind.JES) ? new ViewportView() : null;
     this.vnPreview = (kind == Kind.VNS) ? new VnPreviewView() : null;
@@ -69,6 +74,12 @@ public class FileEditorTab extends BorderPane {
     addEventFilter(KeyEvent.KEY_RELEASED, e -> {
       if (viewport != null) viewport.getInput().keyUp(mapKey(e.getCode()));
     });
+
+    // Timeline sync between code and graph
+    if (kind == Kind.TIMELINE && timelineEditor != null && timelineView != null) {
+      timelineEditor.setOnTextChanged(text -> timelineView.fromText(text));
+      timelineView.setOnChanged(() -> timelineEditor.setTextNoEvent(timelineView.toDsl()));
+    }
   }
 
   public void runFromLabel(String label) {
@@ -98,6 +109,12 @@ public class FileEditorTab extends BorderPane {
       setCenter(sp);
     } else if (kind == Kind.JAVA) {
       setCenter(javaEditor);
+    } else if (kind == Kind.TIMELINE) {
+      SplitPane sp = new SplitPane();
+      sp.setOrientation(javafx.geometry.Orientation.VERTICAL);
+      sp.getItems().addAll(timelineView, timelineEditor);
+      sp.setDividerPositions(0.6);
+      setCenter(sp);
     } else {
       setCenter(new javafx.scene.control.Label("Unsupported file type"));
     }
@@ -112,6 +129,7 @@ public class FileEditorTab extends BorderPane {
     this.projectRoot = root;
     if (jesEditor != null) jesEditor.setProjectRoot(root);
     if (vnsEditor != null) vnsEditor.setProjectRoot(root);
+    if (timelineView != null) timelineView.setProjectRoot(root);
   }
 
   public void setCommandStack(com.jvn.editor.commands.CommandStack cs) {
@@ -171,6 +189,10 @@ public class FileEditorTab extends BorderPane {
         VnScriptParser parser = new VnScriptParser();
         VnScenario scenario = parser.parse(new FileInputStream(file));
         if (vnPreview != null) vnPreview.setScenario(scenario);
+      } else if (kind == Kind.TIMELINE) {
+        String text = Files.exists(file.toPath()) ? Files.readString(file.toPath()) : "";
+        if (timelineEditor != null) timelineEditor.setText(text);
+        if (timelineView != null) timelineView.fromText(text);
       } else if (kind == Kind.JAVA) {
         String code = Files.readString(file.toPath());
         javaEditor.setText(code);
@@ -189,6 +211,9 @@ public class FileEditorTab extends BorderPane {
       } else if (kind == Kind.VNS) {
         String content = vnsEditor.getText();
         try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
+      } else if (kind == Kind.TIMELINE) {
+        String content = timelineEditor.getText();
+        try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
       } else if (kind == Kind.JAVA) {
         String content = javaEditor.getText();
         try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
@@ -205,6 +230,7 @@ public class FileEditorTab extends BorderPane {
     if (kind == Kind.JES) return jesEditor;
     if (kind == Kind.VNS) return vnsEditor;
     if (kind == Kind.JAVA) return javaEditor;
+    if (kind == Kind.TIMELINE) return timelineEditor;
     return null;
   }
 
