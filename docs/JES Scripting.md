@@ -57,6 +57,33 @@ scene "Demo" {
 - scale "entity" { sx: , sy: , dur: , easing: }
 - call "functionName"  (placeholder in runtime)
 
+## VN Bridge (Interop)
+
+When a JES scene is launched from a VNS script, the runtime wires several calls:
+
+- From JES to VN
+  - `call "return" { label: "after" score: 123 }`
+    - Pops the JES scene, copies props (except `label`/`goto`) into VN variables, jumps to the label (props `label` wins; falls back to label provided in the VNS `[jes push ... label L]`).
+  - `call "vns" { ... }` alias of `return`.
+  - `call "hud" { msg: "text" }` shows a HUD message in the VN layer.
+  - `call "pop" {}` pops the JES scene without jumping.
+
+- From VN to JES
+  - `[jes call <name> k=v ...]` invokes a registered `call` handler in `JesScene2D`.
+  - Launch-time init: VNS can pass props on launch via `with k=v ...`. The runtime calls `call "init" { ... }` once after the scene loads so you can configure initial state.
+
+Example inside a JES minigame:
+
+```jes
+// Called by VNS on launch
+call "init" { difficulty: hard lives: 3 }
+
+// End of game
+call "return" { label: "after_game" score: 12345 }
+```
+
+See also: docs/VNS Scripting.md → "JES interop from VNS".
+
 ## Easing Types
 Optional easing property for timeline actions:
 - linear (default)

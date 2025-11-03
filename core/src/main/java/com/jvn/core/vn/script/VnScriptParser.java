@@ -178,6 +178,18 @@ public class VnScriptParser {
           case "history":
             builder.external("history", arg == null ? "" : arg);
             break;
+          case "jes_push":
+            if (arg != null && !arg.isBlank()) builder.external("jes", "push " + arg);
+            break;
+          case "jes_replace":
+            if (arg != null && !arg.isBlank()) builder.external("jes", "replace " + arg);
+            break;
+          case "jes_pop":
+            builder.external("jes", "pop");
+            break;
+          case "jes_call":
+            if (arg != null && !arg.isBlank()) builder.external("jes", "call " + arg);
+            break;
           case "wait":
             if (arg != null) {
               try { builder.waitMs(Long.parseLong(arg)); } catch (NumberFormatException ignored) {}

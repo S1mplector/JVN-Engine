@@ -45,13 +45,43 @@ public class RuntimeVnInterop implements VnInterop {
       switch (cmd) {
         case "push": {
           String script = toks.length >= 2 ? toks[1] : null;
-          JesScene2D js = loadJes(script);
+          String label = null;
+          for (int i = 2; i < toks.length - 1; i++) {
+            if ("label".equalsIgnoreCase(toks[i])) { label = toks[i+1]; break; }
+          }
+          java.util.Map<String,Object> initProps = new java.util.HashMap<>();
+          int withIdx = -1;
+          for (int i = 2; i < toks.length; i++) { if ("with".equalsIgnoreCase(toks[i])) { withIdx = i; break; } }
+          if (withIdx >= 0) {
+            for (int i = withIdx + 1; i < toks.length; i++) {
+              String t = toks[i]; int eq = t.indexOf('='); if (eq > 0) {
+                String k = t.substring(0, eq); String v = t.substring(eq+1);
+                initProps.put(k, parseScalar(v));
+              }
+            }
+          }
+          JesScene2D js = loadJes(script, scene, label, initProps);
           if (js != null) engine.scenes().push(js);
           return VnInteropResult.advance();
         }
         case "replace": {
           String script = toks.length >= 2 ? toks[1] : null;
-          JesScene2D js = loadJes(script);
+          String label = null;
+          for (int i = 2; i < toks.length - 1; i++) {
+            if ("label".equalsIgnoreCase(toks[i])) { label = toks[i+1]; break; }
+          }
+          java.util.Map<String,Object> initProps = new java.util.HashMap<>();
+          int withIdx = -1;
+          for (int i = 2; i < toks.length; i++) { if ("with".equalsIgnoreCase(toks[i])) { withIdx = i; break; } }
+          if (withIdx >= 0) {
+            for (int i = withIdx + 1; i < toks.length; i++) {
+              String t = toks[i]; int eq = t.indexOf('='); if (eq > 0) {
+                String k = t.substring(0, eq); String v = t.substring(eq+1);
+                initProps.put(k, parseScalar(v));
+              }
+            }
+          }
+          JesScene2D js = loadJes(script, scene, label, initProps);
           if (js != null) engine.scenes().replace(js);
           return VnInteropResult.advance();
         }
@@ -84,11 +114,46 @@ public class RuntimeVnInterop implements VnInterop {
     return VnInteropResult.advance();
   }
 
-  private JesScene2D loadJes(String script) throws Exception {
+  private JesScene2D loadJes(String script, VnScene vnScene, String defaultReturnLabel, java.util.Map<String,Object> initProps) throws Exception {
     if (script == null || script.isBlank()) return null;
     AssetCatalog cat = new AssetCatalog();
     try (InputStream in = cat.open(AssetType.SCRIPT, script)) {
-      return JesLoader.load(in);
+      JesScene2D js = JesLoader.load(in);
+      // Bridge calls from JES back into VN/runtime
+      js.registerCall("hud", props -> {
+        Object msg = props == null ? null : props.get("msg");
+        if (msg != null) vnScene.getState().showHudMessage(String.valueOf(msg), 1500);
+      });
+      js.registerCall("pop", props -> engine.scenes().pop());
+      java.util.function.Consumer<java.util.Map<String,Object>> doReturn = props -> {
+        // Set variables if provided
+        if (props != null) {
+          for (var e : props.entrySet()) {
+            String k = String.valueOf(e.getKey());
+            if ("label".equalsIgnoreCase(k) || "goto".equalsIgnoreCase(k)) continue;
+            vnScene.getState().setVariable(k, e.getValue());
+          }
+        }
+        // Pop JES and jump to label if specified or default
+        String label = null;
+        if (props != null) {
+          Object l1 = props.get("label");
+          Object l2 = props.get("goto");
+          if (l1 != null) label = String.valueOf(l1);
+          else if (l2 != null) label = String.valueOf(l2);
+        }
+        if (label == null) label = defaultReturnLabel;
+        engine.scenes().pop();
+        if (label != null && !label.isBlank()) {
+          vnScene.getState().jumpToLabel(label);
+        }
+      };
+      js.registerCall("return", doReturn);
+      js.registerCall("vns", doReturn); // alias
+      if (initProps != null && !initProps.isEmpty()) {
+        try { js.invokeCall("init", initProps); } catch (Exception ignored) {}
+      }
+      return js;
     }
   }
 

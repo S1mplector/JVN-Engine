@@ -235,6 +235,66 @@ Bob: Nice to meet you.
 
 This document reflects the parser’s supported constructs; if you add new commands to `VnScriptParser`, update this guide accordingly.
 
+## JES interop from VNS
+
+You can launch JES scenes (e.g., minigames) mid-VN and return with results.
+
+- Launching a JES scene
+```
+[jes push <script.jes> [label <returnLabel>] [with k=v ...]]
+[jes replace <script.jes> [label <returnLabel>] [with k=v ...]]
+[jes pop]
+[jes call <name> k=v ...]         # calls into the active JES scene
+```
+
+- Convenience shortcuts
+```
+[jes_push <script.jes>]
+[jes_replace <script.jes>]
+[jes_pop]
+[jes_call <name> k=v]
+```
+
+- Returning to VNS from JES
+  - In JES, call `return` (or `vns`) with optional props. Runtime will:
+    - Pop the JES scene.
+    - Copy props into VN variables (except `label`/`goto`).
+    - Jump to `label` (from props) or to the `label` specified in the `[jes push ... label L]` call.
+
+### End-to-end example
+
+VNS script:
+```vns
+@label start
+Alice: Let’s play a quick minigame!
+[jes push game/minigames/brickbreaker.jes label after_game with difficulty=hard lives=3]
+
+@label after_game
+Alice: Welcome back!
+Alice: (The minigame stored your score in a VN variable named "score".)
+> Try again -> start
+> Continue
+```
+
+JES script snippet (inside the game):
+```jes
+// When the game ends
+call "return" { label: "after_game" score: 12345 }
+```
+
+### Diagram
+
+```mermaid
+sequenceDiagram
+  participant VN as VNS Scene
+  participant JES as JES Scene
+  VN->>JES: [jes push brickbreaker.jes label after_game with difficulty=hard]
+  Note over JES: Gameplay...
+  JES-->>VN: call "return" { label: "after_game", score: 12345 }
+  VN->>VN: Pop JES, set var score=12345
+  VN->>VN: jump to @label after_game
+```
+
 ## Example project
 
 See `demo-game/src/main/resources/game/scripts/` for `.vns` examples such as `demo.vns`. A minimal layout:
