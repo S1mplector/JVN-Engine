@@ -100,6 +100,7 @@ public class StoryTimelineView extends BorderPane {
   private final ScrollPane graphScroll = new ScrollPane(graph);
   private Slider zoomSlider;
   private File projectRoot;
+  private File timelineFile;
   private Consumer<Arc> onRunArc;
   private Consumer<Link> onRunLink;
   private Runnable onChanged;
@@ -133,6 +134,7 @@ public class StoryTimelineView extends BorderPane {
 
     Button bAddArc = new Button("Add Arc"); bAddArc.setOnAction(e -> addArc());
     Button bAuto = new Button("Auto Layout"); bAuto.setOnAction(e -> { graph.autoLayout(); save(); });
+    Button bFit = new Button("Fit"); bFit.setOnAction(e -> zoomToFit());
     Button bValidate = new Button("Validate"); bValidate.setOnAction(e -> validate());
     TextField tfSearch = new TextField(); tfSearch.setPromptText("Search arcs...");
     tfSearch.textProperty().addListener((o, ov, nv) -> graph.highlight(nv));
@@ -141,7 +143,7 @@ public class StoryTimelineView extends BorderPane {
     FlowPane actions = new FlowPane(6, 6);
     actions.setPadding(new Insets(6));
     // Minimal toolbar: Add Arc, Search, Auto Layout, Validate (zoom via Ctrl/Cmd + wheel)
-    actions.getChildren().addAll(bAddArc, tfSearch, bAuto, bValidate);
+    actions.getChildren().addAll(bAddArc, tfSearch, bAuto, bFit, bValidate);
     // Wrap to new rows instead of squeezing buttons to tiny squares
     actions.prefWrapLengthProperty().bind(widthProperty().subtract(24));
     setTop(actions);
@@ -200,6 +202,7 @@ public class StoryTimelineView extends BorderPane {
   public void setOnRunArc(Consumer<Arc> c) { this.onRunArc = c; }
   public void setOnRunLink(Consumer<Link> c) { this.onRunLink = c; }
   public void setOnChanged(Runnable r) { this.onChanged = r; }
+  public void setTimelineFile(File f) { this.timelineFile = f; }
   public List<Arc> getArcs() { return new ArrayList<>(arcs.getItems()); }
   public List<Link> getLinks() { return new ArrayList<>(links.getItems()); }
   public Arc findArc(String name) {
@@ -257,16 +260,16 @@ public class StoryTimelineView extends BorderPane {
   }
 
   private void save() {
-    if (projectRoot == null) return;
-    File f = new File(projectRoot, "story.timeline");
+    File f = timelineFile != null ? timelineFile : (projectRoot != null ? new File(projectRoot, "story.timeline") : null);
+    if (f == null) return;
     try (PrintWriter pw = new PrintWriter(new FileWriter(f))) {
       pw.print(toDsl());
     } catch (Exception ignored) {}
   }
 
   private void load() {
-    if (projectRoot == null) return;
-    File f = new File(projectRoot, "story.timeline");
+    File f = timelineFile != null ? timelineFile : (projectRoot != null ? new File(projectRoot, "story.timeline") : null);
+    if (f == null) return;
     if (!f.exists()) return;
     try {
       String text = java.nio.file.Files.readString(f.toPath());
@@ -411,5 +414,34 @@ public class StoryTimelineView extends BorderPane {
       }
     }
     arcs.getItems().setAll(alist); links.getItems().setAll(llist); refreshGraph();
+  }
+
+  private void zoomToFit() {
+    if (arcs.getItems().isEmpty()) return;
+    double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
+    for (Arc a : arcs.getItems()) {
+      if (a == null) continue;
+      minX = Math.min(minX, a.x);
+      minY = Math.min(minY, a.y);
+      maxX = Math.max(maxX, a.x + 140);
+      maxY = Math.max(maxY, a.y + 44);
+    }
+    double pad = 80;
+    double widthNeeded = (maxX - minX) + pad;
+    double heightNeeded = (maxY - minY) + pad;
+    double vw = graphScroll.getViewportBounds().getWidth();
+    double vh = graphScroll.getViewportBounds().getHeight();
+    if (vw <= 0 || vh <= 0) return;
+    double s = Math.min(vw / widthNeeded, vh / heightNeeded);
+    s = Math.max(zoomSlider.getMin(), Math.min(zoomSlider.getMax(), s));
+    zoomSlider.setValue(s);
+    double contentW = Math.max(widthNeeded * s, vw);
+    double contentH = Math.max(heightNeeded * s, vh);
+    double centerX = (minX + maxX) / 2 * s;
+    double centerY = (minY + maxY) / 2 * s;
+    double hx = (centerX - vw / 2) / Math.max(1, (contentW - vw));
+    double vy = (centerY - vh / 2) / Math.max(1, (contentH - vh));
+    graphScroll.setHvalue(Math.max(0, Math.min(1, hx)));
+    graphScroll.setVvalue(Math.max(0, Math.min(1, vy)));
   }
 }

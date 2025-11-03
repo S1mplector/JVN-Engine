@@ -86,6 +86,7 @@ public class StoryGraphPane extends Pane {
 
   private final Map<String, NodeView> nodeMap = new HashMap<>();
   private final List<Group> linkViews = new ArrayList<>();
+  private final List<Group> clusterViews = new ArrayList<>();
   private List<StoryTimelineView.Arc> arcs = new ArrayList<>();
   private List<StoryTimelineView.Link> links = new ArrayList<>();
   private NodeView linkingFrom;
@@ -148,9 +149,12 @@ public class StoryGraphPane extends Pane {
 
   private void refresh() {
     getChildren().clear();
-    nodeMap.clear(); linkViews.clear();
+    nodeMap.clear(); linkViews.clear(); clusterViews.clear();
 
-    // Build nodes first
+    // Build cluster backgrounds first (based on arc positions)
+    drawClusters();
+
+    // Build nodes
     for (StoryTimelineView.Arc a : arcs) {
       if (Double.isNaN(a.x)) a.x = 40; if (Double.isNaN(a.y)) a.y = 40;
       NodeView nv = new NodeView(a);
@@ -238,7 +242,32 @@ public class StoryGraphPane extends Pane {
         }
       });
       linkViews.add(g);
-      getChildren().add(0, g); // behind nodes
+      getChildren().add(clusterViews.size(), g); // above clusters, behind nodes
+    }
+  }
+
+  private void drawClusters() {
+    Map<String, double[]> bounds = new HashMap<>();
+    for (StoryTimelineView.Arc a : arcs) {
+      if (a == null || a.cluster == null || a.cluster.isBlank()) continue;
+      double x1 = a.x, y1 = a.y, x2 = a.x + 140, y2 = a.y + 44;
+      double[] b = bounds.get(a.cluster);
+      if (b == null) { b = new double[]{x1, y1, x2, y2}; bounds.put(a.cluster, b); }
+      else { b[0] = Math.min(b[0], x1); b[1] = Math.min(b[1], y1); b[2] = Math.max(b[2], x2); b[3] = Math.max(b[3], y2); }
+    }
+    for (Map.Entry<String, double[]> e : bounds.entrySet()) {
+      String name = e.getKey(); double[] b = e.getValue();
+      double pad = 16;
+      Rectangle bg = new Rectangle(b[0]-pad, b[1]-pad, (b[2]-b[0])+2*pad, (b[3]-b[1])+2*pad);
+      bg.setArcWidth(12); bg.setArcHeight(12);
+      bg.setFill(Color.web("#334155", 0.25));
+      bg.setStroke(Color.web("#94a3b8")); bg.setStrokeWidth(1.0);
+      Text t = new Text(name);
+      t.setFill(Color.web("#cbd5e1"));
+      t.setX(bg.getX()+8); t.setY(bg.getY()-6);
+      Group g = new Group(bg, t);
+      clusterViews.add(g);
+      getChildren().add(g);
     }
   }
 
@@ -328,7 +357,20 @@ public class StoryGraphPane extends Pane {
     // Attach release hook to existing NodeViews to commit layout changes
     for (NodeView nv : nodeMap.values()) {
       if (nv != null) {
-        nv.mouseReleasedHook = e -> { if (linkingFrom != null) finishLinking(nv); if (onLayoutCommitted != null) onLayoutCommitted.run(); };
+        nv.mouseReleasedHook = e -> {
+          if (linkingFrom != null) {
+            finishLinking(nv);
+          } else {
+            // snap to grid
+            double step = 20.0;
+            double nx = Math.round(nv.getLayoutX()/step)*step;
+            double ny = Math.round(nv.getLayoutY()/step)*step;
+            nv.setLayoutX(nx); nv.setLayoutY(ny);
+            nv.arc.x = nx; nv.arc.y = ny;
+            if (nv.onMoved != null) nv.onMoved.run();
+          }
+          if (onLayoutCommitted != null) onLayoutCommitted.run();
+        };
       }
     }
   }

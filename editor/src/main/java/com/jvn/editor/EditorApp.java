@@ -216,9 +216,10 @@ public class EditorApp extends Application {
         try (FileWriter fw = new FileWriter(new File(dir, "scripts/prologue.vns"))) {
           fw.write("label start\n\n\"Welcome to " + name + "!\"\n\n[choice Begin->start]\n");
         }
-        // sample timeline
+        // sample timeline (DSL)
         try (FileWriter fw = new FileWriter(new File(dir, "story.timeline"))) {
-          fw.write("ARC|Prologue|scripts/prologue.vns|start|40|40\n");
+          fw.write("# Timeline for " + name + "\n");
+          fw.write("arc \"Prologue\" script \"scripts/prologue.vns\" entry \"start\" at 40,40\n");
         }
         // default settings
         try (FileOutputStream fos = new FileOutputStream(new File(dir, "vn.settings"))) {
@@ -250,7 +251,7 @@ public class EditorApp extends Application {
       }
       try (FileOutputStream fos = new FileOutputStream(new File(dir, "jvn.project"))) { p.store(fos, "JVN Project Manifest"); }
       this.projectRoot = dir; if (projView != null) projView.setRootDirectory(dir);
-      if (timelineView != null) timelineView.setProjectRoot(dir);
+      if (timelineView != null) { timelineView.setProjectRoot(dir); timelineView.setTimelineFile(new File(dir, "story.timeline")); }
       if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
       status.setText("Created project: " + name);
     } catch (Exception ex) {
@@ -423,7 +424,7 @@ public class EditorApp extends Application {
     projView.setOnOpenFile(f -> {
       if (f == null) return;
       String name = f.getName().toLowerCase();
-      if (name.endsWith(".jes") || name.endsWith(".txt") || name.endsWith(".vns") || name.endsWith(".java")) {
+      if (name.endsWith(".jes") || name.endsWith(".txt") || name.endsWith(".vns") || name.endsWith(".java") || name.endsWith(".timeline")) {
         openFile(f);
       } else {
         try { java.awt.Desktop.getDesktop().open(f); } catch (Exception ignored) {}
@@ -484,7 +485,7 @@ public class EditorApp extends Application {
     if (dir == null) return;
     this.projectRoot = dir;
     if (projView != null) projView.setRootDirectory(dir);
-    if (timelineView != null) timelineView.setProjectRoot(dir);
+    if (timelineView != null) { timelineView.setProjectRoot(dir); String tf = loadManifest(dir) != null ? loadManifest(dir).getProperty("timeline", "story.timeline") : "story.timeline"; timelineView.setTimelineFile(new File(dir, tf)); }
     if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
     applyProjectRootToTabs();
     status.setText("Project: " + dir.getName());

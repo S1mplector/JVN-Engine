@@ -77,6 +77,7 @@ public class FileEditorTab extends BorderPane {
 
     // Timeline sync between code and graph
     if (kind == Kind.TIMELINE && timelineEditor != null && timelineView != null) {
+      if (file != null) timelineView.setTimelineFile(file);
       timelineEditor.setOnTextChanged(text -> timelineView.fromText(text));
       timelineView.setOnChanged(() -> timelineEditor.setTextNoEvent(timelineView.toDsl()));
     }
