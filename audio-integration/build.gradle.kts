@@ -6,8 +6,7 @@ sourceSets {
   main {
     java {
       exclude("**/simp3/Simp3/**")
-      // keep legacy exclusions; include our adapter
-      exclude("**/audio/simp3/**")
+      // keep legacy exclusions
     }
   }
 }
