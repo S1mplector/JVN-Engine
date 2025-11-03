@@ -99,6 +99,7 @@ public class StoryTimelineView extends BorderPane {
   private final StoryGraphPane graph = new StoryGraphPane();
   private final ScrollPane graphScroll = new ScrollPane(graph);
   private Slider zoomSlider;
+  private ComboBox<String> clusterFilter;
   private File projectRoot;
   private File timelineFile;
   private Consumer<Arc> onRunArc;
@@ -142,8 +143,13 @@ public class StoryTimelineView extends BorderPane {
     zoomSlider.valueProperty().addListener((o, ov, nv) -> { double s = nv.doubleValue(); graph.setScaleX(s); graph.setScaleY(s); });
     FlowPane actions = new FlowPane(6, 6);
     actions.setPadding(new Insets(6));
-    // Minimal toolbar: Add Arc, Search, Auto Layout, Validate (zoom via Ctrl/Cmd + wheel)
-    actions.getChildren().addAll(bAddArc, tfSearch, bAuto, bFit, bValidate);
+    clusterFilter = new ComboBox<>();
+    clusterFilter.setPrefWidth(160);
+    clusterFilter.setPromptText("Cluster: All");
+    clusterFilter.valueProperty().addListener((o,ov,nv) -> {
+      if (nv == null || nv.equals("All")) graph.setFilterCluster(null); else graph.setFilterCluster(nv);
+    });
+    actions.getChildren().addAll(bAddArc, tfSearch, clusterFilter, bAuto, bFit, bValidate);
     // Wrap to new rows instead of squeezing buttons to tiny squares
     actions.prefWrapLengthProperty().bind(widthProperty().subtract(24));
     setTop(actions);
@@ -305,13 +311,29 @@ public class StoryTimelineView extends BorderPane {
 
   private void refreshGraph() {
     graph.setModel(arcs.getItems(), links.getItems());
+    updateClusterFilter();
   }
 
   private void onGraphChanged() {
     // sync list views with graph model and save
     arcs.refresh(); links.refresh();
     save();
+    updateClusterFilter();
     if (onChanged != null) onChanged.run();
+  }
+
+  private void updateClusterFilter() {
+    if (clusterFilter == null) return;
+    java.util.Set<String> names = graph.getClusterNames();
+    String sel = clusterFilter.getValue();
+    clusterFilter.getItems().setAll(new java.util.ArrayList<>());
+    clusterFilter.getItems().add("All");
+    for (String n : names) clusterFilter.getItems().add(n);
+    if (sel != null && clusterFilter.getItems().contains(sel)) {
+      clusterFilter.setValue(sel);
+    } else {
+      clusterFilter.setValue("All");
+    }
   }
 
   private void removeArcAndLinks(String arcName) {

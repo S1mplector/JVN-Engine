@@ -53,6 +53,11 @@
    -fx-fill: #89b4fa; /* Blue */
  }
 
+ .error {
+   -fx-underline: true;
+   -fx-fill: #f38ba8; /* red accent */
+ }
+
  /* Line numbers (RichTextFX LineNumberFactory) */
  .lineno {
    -fx-background-color: #181825; /* Mantle */

@@ -5,6 +5,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
 import javafx.scene.Group;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.MenuItem;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
@@ -54,8 +55,23 @@ public class StoryGraphPane extends Pane {
       setLayoutX(arc.x);
       setLayoutY(arc.y);
       enableDrag();
-      // Handlers are managed via NodeView's press/release with target checks
       this.setPickOnBounds(false);
+      inHandle.setOnMouseEntered(e -> {
+        inHandle.setScaleX(1.25); inHandle.setScaleY(1.25);
+        inHandle.setFill(Color.web("#64748b"));
+      });
+      inHandle.setOnMouseExited(e -> {
+        inHandle.setScaleX(1.0); inHandle.setScaleY(1.0);
+        inHandle.setFill(Color.web("#4a5568"));
+      });
+      outHandle.setOnMouseEntered(e -> {
+        outHandle.setScaleX(1.25); outHandle.setScaleY(1.25);
+        outHandle.setFill(Color.web("#64748b"));
+      });
+      outHandle.setOnMouseExited(e -> {
+        outHandle.setScaleX(1.0); outHandle.setScaleY(1.0);
+        outHandle.setFill(Color.web("#4a5568"));
+      });
     }
     private void enableDrag() {
       setOnMousePressed(e -> {
@@ -80,6 +96,10 @@ public class StoryGraphPane extends Pane {
         if (onMoved != null) onMoved.run();
       });
       setOnMouseReleased(e -> { if (mouseReleasedHook != null) mouseReleasedHook.accept(e); });
+      inHandle.setOnMouseReleased(e -> {
+        if (mouseReleasedHook != null) mouseReleasedHook.accept(e);
+        e.consume();
+      });
     }
     Runnable onMoved;
   }
@@ -87,11 +107,15 @@ public class StoryGraphPane extends Pane {
   private final Map<String, NodeView> nodeMap = new HashMap<>();
   private final List<Group> linkViews = new ArrayList<>();
   private final List<Group> clusterViews = new ArrayList<>();
+  private final Map<String, Color> clusterColorCache = new HashMap<>();
+  private final Set<String> collapsedClusters = new HashSet<>();
   private List<StoryTimelineView.Arc> arcs = new ArrayList<>();
   private List<StoryTimelineView.Link> links = new ArrayList<>();
   private NodeView linkingFrom;
   private Line tempLine;
   private boolean requireShiftToLink = true;
+  private String filterCluster;
+  private static boolean HANDLE_TIP_SHOWN = false;
 
   private Consumer<StoryTimelineView.Arc> onRunArc;
   private Consumer<StoryTimelineView.Link> onRunLink;
@@ -126,6 +150,27 @@ public class StoryGraphPane extends Pane {
     refresh();
   }
 
+  public Set<String> getClusterNames() {
+    Set<String> out = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    for (StoryTimelineView.Arc a : arcs) {
+      if (a != null && a.cluster != null && !a.cluster.isBlank()) out.add(a.cluster);
+    }
+    return out;
+  }
+
+  public void setFilterCluster(String cluster) {
+    this.filterCluster = (cluster == null || cluster.isBlank()) ? null : cluster;
+    refresh();
+  }
+
+  public String getFilterCluster() { return filterCluster; }
+
+  public void toggleClusterCollapse(String cluster) {
+    if (cluster == null || cluster.isBlank()) return;
+    if (collapsedClusters.contains(cluster)) collapsedClusters.remove(cluster); else collapsedClusters.add(cluster);
+    refresh();
+  }
+
   public void autoLayout() {
     if (arcs == null || arcs.isEmpty()) return;
     int cols = Math.max(1, (int) Math.ceil(Math.sqrt(arcs.size())));
@@ -151,12 +196,16 @@ public class StoryGraphPane extends Pane {
     getChildren().clear();
     nodeMap.clear(); linkViews.clear(); clusterViews.clear();
 
-    // Build cluster backgrounds first (based on arc positions)
     drawClusters();
 
     // Build nodes
     for (StoryTimelineView.Arc a : arcs) {
       if (Double.isNaN(a.x)) a.x = 40; if (Double.isNaN(a.y)) a.y = 40;
+      if (filterCluster != null) {
+        String c = (a.cluster == null) ? "" : a.cluster;
+        if (!c.equals(filterCluster)) continue;
+      }
+      if (a.cluster != null && collapsedClusters.contains(a.cluster)) continue;
       NodeView nv = new NodeView(a);
       nv.onMoved = this::updateLinks;
       nv.mousePressedHook = e -> {
@@ -242,40 +291,54 @@ public class StoryGraphPane extends Pane {
         }
       });
       linkViews.add(g);
-      getChildren().add(clusterViews.size(), g); // above clusters, behind nodes
+      getChildren().add(clusterViews.size(), g);
     }
   }
 
   private void drawClusters() {
     Map<String, double[]> bounds = new HashMap<>();
+    Map<String, Integer> counts = new HashMap<>();
     for (StoryTimelineView.Arc a : arcs) {
       if (a == null || a.cluster == null || a.cluster.isBlank()) continue;
+      if (filterCluster != null && !a.cluster.equals(filterCluster)) continue;
       double x1 = a.x, y1 = a.y, x2 = a.x + 140, y2 = a.y + 44;
       double[] b = bounds.get(a.cluster);
-      if (b == null) { b = new double[]{x1, y1, x2, y2}; bounds.put(a.cluster, b); }
-      else { b[0] = Math.min(b[0], x1); b[1] = Math.min(b[1], y1); b[2] = Math.max(b[2], x2); b[3] = Math.max(b[3], y2); }
+      if (b == null) { b = new double[]{x1, y1, x2, y2}; bounds.put(a.cluster, b); counts.put(a.cluster, 1); }
+      else { b[0] = Math.min(b[0], x1); b[1] = Math.min(b[1], y1); b[2] = Math.max(b[2], x2); b[3] = Math.max(b[3], y2); counts.put(a.cluster, counts.getOrDefault(a.cluster,0)+1); }
     }
     for (Map.Entry<String, double[]> e : bounds.entrySet()) {
       String name = e.getKey(); double[] b = e.getValue();
       double pad = 16;
       Rectangle bg = new Rectangle(b[0]-pad, b[1]-pad, (b[2]-b[0])+2*pad, (b[3]-b[1])+2*pad);
       bg.setArcWidth(12); bg.setArcHeight(12);
-      bg.setFill(Color.web("#334155", 0.25));
-      bg.setStroke(Color.web("#94a3b8")); bg.setStrokeWidth(1.0);
-      Text t = new Text(name);
-      t.setFill(Color.web("#cbd5e1"));
+      Color base = colorForCluster(name);
+      bg.setFill(Color.color(base.getRed(), base.getGreen(), base.getBlue(), 0.25));
+      bg.setStroke(base.interpolate(Color.WHITE, 0.2)); bg.setStrokeWidth(1.0);
+      Text t = new Text(name + (collapsedClusters.contains(name) ? " (" + counts.getOrDefault(name,0) + ")" : ""));
+      t.setFill(base.interpolate(Color.WHITE, 0.7));
       t.setX(bg.getX()+8); t.setY(bg.getY()-6);
       Group g = new Group(bg, t);
+      ContextMenu cm = new ContextMenu();
+      MenuItem miToggle = new MenuItem(collapsedClusters.contains(name) ? "Expand Cluster" : "Collapse Cluster");
+      miToggle.setOnAction(ae -> { toggleClusterCollapse(name); });
+      cm.getItems().addAll(miToggle);
+      g.setOnMouseClicked(me -> {
+        if (me.getButton() == MouseButton.SECONDARY) {
+          cm.show(g, me.getScreenX(), me.getScreenY());
+        } else if (me.getButton() == MouseButton.PRIMARY && me.getClickCount() == 2) {
+          toggleClusterCollapse(name);
+        }
+      });
       clusterViews.add(g);
       getChildren().add(g);
     }
   }
 
   private Group drawArrow(NodeView from, NodeView to) {
-    double sx = from.getLayoutX() + from.rect.getWidth() / 2.0;
-    double sy = from.getLayoutY() + from.rect.getHeight() / 2.0;
-    double ex = to.getLayoutX() + to.rect.getWidth() / 2.0;
-    double ey = to.getLayoutY() + to.rect.getHeight() / 2.0;
+    double sx = from.getLayoutX() + from.outHandle.getCenterX();
+    double sy = from.getLayoutY() + from.outHandle.getCenterY();
+    double ex = to.getLayoutX() + to.inHandle.getCenterX();
+    double ey = to.getLayoutY() + to.inHandle.getCenterY();
 
     Line line = new Line(sx, sy, ex, ey);
     line.setStroke(Color.web("#7a8499"));
@@ -314,17 +377,42 @@ public class StoryGraphPane extends Pane {
     tempLine = new Line();
     tempLine.setStroke(Color.web("#9fb3ff"));
     tempLine.getStrokeDashArray().setAll(8.0, 8.0);
-    double sx = from.getLayoutX() + from.rect.getWidth() / 2.0;
-    double sy = from.getLayoutY() + from.rect.getHeight() / 2.0;
+    double sx = from.getLayoutX() + from.outHandle.getCenterX();
+    double sy = from.getLayoutY() + from.outHandle.getCenterY();
     tempLine.setStartX(sx); tempLine.setStartY(sy);
     Point2D p = sceneToLocal(sceneX, sceneY);
     tempLine.setEndX(p.getX()); tempLine.setEndY(p.getY());
     getChildren().add(0, tempLine);
+    // Highlight all in-handles as valid drop targets
+    nodeMap.values().forEach(n -> {
+      if (n != from) {
+        n.inHandle.setFill(Color.web("#60a5fa"));
+        n.inHandle.setScaleX(1.15); n.inHandle.setScaleY(1.15);
+      }
+    });
+    if (!HANDLE_TIP_SHOWN) {
+      try {
+        HANDLE_TIP_SHOWN = true;
+        Tooltip tip = new Tooltip("Drag from the out handle to link arcs\nDrop on the in handle to connect");
+        javafx.geometry.Bounds scr = from.outHandle.localToScreen(from.outHandle.getBoundsInLocal());
+        if (scr != null) {
+          tip.show(from.outHandle, scr.getMinX(), scr.getMaxY() + 6);
+          new Thread(() -> {
+            try { Thread.sleep(2500); } catch (InterruptedException ignored) {}
+            javafx.application.Platform.runLater(tip::hide);
+          }).start();
+        }
+      } catch (Exception ignore) {}
+    }
   }
 
   private void cancelLinking() {
     if (tempLine != null) getChildren().remove(tempLine);
     tempLine = null; linkingFrom = null;
+    nodeMap.values().forEach(n -> {
+      n.inHandle.setFill(Color.web("#4a5568"));
+      n.inHandle.setScaleX(1.0); n.inHandle.setScaleY(1.0);
+    });
   }
 
   private void finishLinking(NodeView target) {
@@ -361,7 +449,6 @@ public class StoryGraphPane extends Pane {
           if (linkingFrom != null) {
             finishLinking(nv);
           } else {
-            // snap to grid
             double step = 20.0;
             double nx = Math.round(nv.getLayoutX()/step)*step;
             double ny = Math.round(nv.getLayoutY()/step)*step;
@@ -373,5 +460,33 @@ public class StoryGraphPane extends Pane {
         };
       }
     }
+  }
+
+  private Color colorForCluster(String name) {
+    if (name == null) return Color.web("#334155");
+    Color c = clusterColorCache.get(name);
+    if (c != null) return c;
+    int h = name.hashCode();
+    double hue = (h & 0xffff) / 65535.0 * 360.0;
+    double s = 0.45;
+    double l = 0.45;
+    c = hsl(hue, s, l);
+    clusterColorCache.put(name, c);
+    return c;
+  }
+
+  private static Color hsl(double h, double s, double l) {
+    h = (h % 360 + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
+    double c = (1 - Math.abs(2*l - 1)) * s;
+    double x = c * (1 - Math.abs((h/60.0) % 2 - 1));
+    double m = l - c/2;
+    double r=0,g=0,b=0;
+    if (h < 60) { r=c; g=x; b=0; }
+    else if (h < 120) { r=x; g=c; b=0; }
+    else if (h < 180) { r=0; g=c; b=x; }
+    else if (h < 240) { r=0; g=x; b=c; }
+    else if (h < 300) { r=x; g=0; b=c; }
+    else { r=c; g=0; b=x; }
+    return new Color(r+m, g+m, b+m, 1.0);
   }
 }

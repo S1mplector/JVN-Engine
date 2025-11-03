@@ -130,6 +130,7 @@ public class FileEditorTab extends BorderPane {
     this.projectRoot = root;
     if (jesEditor != null) jesEditor.setProjectRoot(root);
     if (vnsEditor != null) vnsEditor.setProjectRoot(root);
+    if (timelineEditor != null) timelineEditor.setProjectRoot(root);
     if (timelineView != null) timelineView.setProjectRoot(root);
   }
 
