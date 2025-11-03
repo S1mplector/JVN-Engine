@@ -206,6 +206,17 @@ public class VnScenarioBuilder {
     return this;
   }
 
+  public VnScenarioBuilder fadeOutBgm(long durationMs) {
+    scenarioBuilder.addNode(
+      VnNode.builder(VnNodeType.JUMP)
+        .audioCommand(VnAudioCommand.builder(VnAudioCommand.AudioCommandType.FADE_OUT_BGM)
+          .durationMs(Math.max(0, durationMs))
+          .build())
+        .build()
+    );
+    return this;
+  }
+
   public VnScenarioBuilder playSfx(String trackId) {
     scenarioBuilder.addNode(
       VnNode.builder(VnNodeType.JUMP)

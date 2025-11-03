@@ -138,7 +138,11 @@ public class VnScriptParser {
             builder.stopBgm();
             break;
           case "bgm_fadeout":
-            builder.fadeOutBgm();
+            if (arg != null && !arg.isEmpty()) {
+              try { builder.fadeOutBgm(Long.parseLong(arg)); } catch (NumberFormatException ignored) { builder.fadeOutBgm(); }
+            } else {
+              builder.fadeOutBgm();
+            }
             break;
           case "sfx":
             if (arg != null && !arg.isEmpty()) builder.playSfx(arg);

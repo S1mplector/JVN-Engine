@@ -101,9 +101,9 @@ Supported commands:
 ```
 [bgm <path-or-id>]     # plays and loops BGM
 [bgm_stop]             # stops BGM
-[bgm_fadeout]          # fades out BGM (falls back to stop if fade unsupported)
+[bgm_fadeout [<ms>]]   # fades out BGM over <ms>; if omitted or 0 → stop immediately
 [sfx <path-or-id>]     # plays SFX once
-[voice <path-or-id>]   # plays voice (currently shares SFX channel)
+[voice <path-or-id>]   # plays voice (dedicated voice channel when available; falls back to SFX)
 ```
 
 - Timing

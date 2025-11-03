@@ -15,6 +15,11 @@ public class VnScene implements Scene {
   private boolean waitingNode = false;
   private long waitRemainingMs = 0;
   private VnInterop interop;
+  // BGM fade state
+  private boolean bgmFadeActive = false;
+  private long bgmFadeRemainingMs = 0;
+  private long bgmFadeDurationMs = 0;
+  private float bgmFadeStartVol = 1.0f;
 
   public VnScene(VnScenario scenario) {
     this.scenario = scenario;
@@ -55,6 +60,21 @@ public class VnScene implements Scene {
 
   @Override
   public void update(long deltaMs) {
+    // Update any active BGM fade regardless of node processing
+    if (bgmFadeActive && audioFacade != null) {
+      bgmFadeRemainingMs = Math.max(0, bgmFadeRemainingMs - deltaMs);
+      float p = bgmFadeDurationMs <= 0 ? 1f : 1f - (bgmFadeRemainingMs / (float) bgmFadeDurationMs);
+      p = Math.min(1f, Math.max(0f, p));
+      float vol = bgmFadeStartVol * (1f - p);
+      audioFacade.setBgmVolume(vol);
+      if (bgmFadeRemainingMs <= 0) {
+        audioFacade.stopBgm();
+        // restore configured volume for future playback
+        audioFacade.setBgmVolume(state.getSettings().getBgmVolume());
+        bgmFadeActive = false;
+      }
+    }
+
     VnNode currentNode = state.getCurrentNode();
     if (currentNode == null) return;
 
@@ -335,18 +355,37 @@ public class VnScene implements Scene {
 
     switch (cmd.getType()) {
       case PLAY_BGM:
+        // Cancel any active fade and ensure volume is restored from settings
+        if (bgmFadeActive) {
+          bgmFadeActive = false;
+          audioFacade.setBgmVolume(state.getSettings().getBgmVolume());
+        }
         audioFacade.playBgm(cmd.getTrackId(), cmd.isLoop());
+        audioFacade.setBgmVolume(state.getSettings().getBgmVolume());
         break;
       case STOP_BGM:
-      case FADE_OUT_BGM:
+        // Cancel fade and stop immediately
+        bgmFadeActive = false;
         audioFacade.stopBgm();
+        break;
+      case FADE_OUT_BGM:
+        long dur = Math.max(0, cmd.getDurationMs());
+        if (dur <= 0) {
+          audioFacade.stopBgm();
+        } else {
+          bgmFadeActive = true;
+          bgmFadeDurationMs = dur;
+          bgmFadeRemainingMs = dur;
+          bgmFadeStartVol = state.getSettings().getBgmVolume();
+          // ensure we start from current setting
+          audioFacade.setBgmVolume(bgmFadeStartVol);
+        }
         break;
       case PLAY_SFX:
         audioFacade.playSfx(cmd.getTrackId());
         break;
       case PLAY_VOICE:
-        // Could play as SFX or have dedicated voice channel
-        audioFacade.playSfx(cmd.getTrackId());
+        audioFacade.playVoice(cmd.getTrackId());
         break;
     }
   }

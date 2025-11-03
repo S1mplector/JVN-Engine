@@ -8,18 +8,21 @@ public class VnAudioCommand {
   private final String trackId;
   private final boolean loop;
   private final float volume;
+  private final long durationMs;
 
   private VnAudioCommand(Builder builder) {
     this.type = builder.type;
     this.trackId = builder.trackId;
     this.loop = builder.loop;
     this.volume = builder.volume;
+    this.durationMs = builder.durationMs;
   }
 
   public AudioCommandType getType() { return type; }
   public String getTrackId() { return trackId; }
   public boolean isLoop() { return loop; }
   public float getVolume() { return volume; }
+  public long getDurationMs() { return durationMs; }
 
   public static Builder builder(AudioCommandType type) { return new Builder(type); }
 
@@ -28,12 +31,14 @@ public class VnAudioCommand {
     private String trackId;
     private boolean loop = true;
     private float volume = 1.0f;
+    private long durationMs = 0L;
 
     private Builder(AudioCommandType type) { this.type = type; }
 
     public Builder trackId(String id) { this.trackId = id; return this; }
     public Builder loop(boolean loop) { this.loop = loop; return this; }
     public Builder volume(float volume) { this.volume = volume; return this; }
+    public Builder durationMs(long ms) { this.durationMs = ms; return this; }
     public VnAudioCommand build() { return new VnAudioCommand(this); }
   }
 
