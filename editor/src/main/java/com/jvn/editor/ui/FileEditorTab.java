@@ -131,6 +131,11 @@ public class FileEditorTab extends BorderPane {
       sp.getItems().addAll(themePreview, themeEditor);
       sp.setDividerPositions(0.6);
       setCenter(sp);
+      if (themeEditor != null && themePreview != null) {
+        String text = themeEditor.getText(); if (text == null) text = "";
+        themePreview.setThemeFromText(text);
+        themeEditor.setOnTextChanged(t -> themePreview.setThemeFromText(t));
+      }
     } else {
       setCenter(new javafx.scene.control.Label("Unsupported file type"));
     }
@@ -217,6 +222,9 @@ public class FileEditorTab extends BorderPane {
         String text = Files.exists(file.toPath()) ? Files.readString(file.toPath()) : "";
         if (themeEditor != null) themeEditor.setText(text);
         if (themePreview != null) themePreview.setThemeFromText(text);
+        if (themeEditor != null && themePreview != null) {
+          themeEditor.setOnTextChanged(t -> themePreview.setThemeFromText(t));
+        }
       } else if (kind == Kind.JAVA) {
         String code = Files.readString(file.toPath());
         javaEditor.setText(code);

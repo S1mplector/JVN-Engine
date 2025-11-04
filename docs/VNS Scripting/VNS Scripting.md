@@ -22,7 +22,7 @@ The parser lives at `core/src/main/java/com/jvn/core/vn/script/VnScriptParser.ja
   ./gradlew :runtime:run --args="--script demo.vns --audio fx"      # default
   ./gradlew :runtime:run --args="--script demo.vns --audio simp3"   # requires audio-engine installed
   ```
-- See also: `docs/JES Scripting.md` (launching minigames) and `docs/Timeline Scripting.md` (branching graph).
+- See also: `docs/JES Scripting/JES Scripting.md` (on JES interop) and `docs/Timeline Scripting/Timeline Scripting.md` (on Timelines).
 
 ## File structure overview
 

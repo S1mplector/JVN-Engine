@@ -34,6 +34,16 @@ public class MenuTheme {
   private String hintFontFamily = "Arial";
   private FontWeight hintFontWeight = FontWeight.NORMAL;
   private int hintFontSize = 14;
+  
+  // Layout and formatting
+  private double titleY = 60.0; // if <1 treat as fraction of height
+  private double listYStart = 0.35; // fraction of height
+  private double lineHeight = 40.0; // pixels
+  // Item prefixes
+  private String itemPrefix = "  ";
+  private String itemSelectedPrefix = "> ";
+  // Hints (main menu only)
+  private String mainHintsText = null;
 
   // Labels
   private String titleText = null; // default: Localization t("app.title")
@@ -82,6 +92,14 @@ public class MenuTheme {
     hintFontWeight = parseWeight(p.getProperty("hintFontWeight"), hintFontWeight);
     hintFontSize = parseInt(p.getProperty("hintFontSize"), hintFontSize);
 
+    // Layout and formatting
+    titleY = parseDouble(p.getProperty("titleY"), titleY);
+    listYStart = parseDouble(p.getProperty("listYStart"), listYStart);
+    lineHeight = parseDouble(p.getProperty("lineHeight"), lineHeight);
+    itemPrefix = p.getProperty("itemPrefix", itemPrefix);
+    itemSelectedPrefix = p.getProperty("itemSelectedPrefix", itemSelectedPrefix);
+    mainHintsText = emptyToNull(p.getProperty("hintsText"));
+
     // Labels
     titleText = emptyToNull(p.getProperty("titleText"));
     labelNewGame = emptyToNull(p.getProperty("label.new"));
@@ -94,6 +112,10 @@ public class MenuTheme {
 
   private static int parseInt(String s, int def) {
     try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+  }
+
+  private static double parseDouble(String s, double def) {
+    try { return Double.parseDouble(s.trim()); } catch (Exception e) { return def; }
   }
 
   private static FontWeight parseWeight(String s, FontWeight def) {
@@ -154,6 +176,13 @@ public class MenuTheme {
   public Font getTitleFont() { return Font.font(titleFontFamily, titleFontWeight, titleFontSize); }
   public Font getItemFont() { return Font.font(itemFontFamily, itemFontWeight, itemFontSize); }
   public Font getHintFont() { return Font.font(hintFontFamily, hintFontWeight, hintFontSize); }
+
+  public double getTitleY() { return titleY; }
+  public double getListYStart() { return listYStart; }
+  public double getLineHeight() { return lineHeight; }
+  public String getItemPrefix() { return itemPrefix; }
+  public String getItemSelectedPrefix() { return itemSelectedPrefix; }
+  public String getMainHintsText() { return mainHintsText; }
 
   public String getTitleText() { return titleText; }
   public String getLabelNewGame() { return labelNewGame; }

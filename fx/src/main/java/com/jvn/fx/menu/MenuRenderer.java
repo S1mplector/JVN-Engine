@@ -26,7 +26,8 @@ public class MenuRenderer {
     clear(w, h);
     String title = theme.getTitleText();
     if (title == null || title.isBlank()) title = Localization.t("app.title");
-    drawTitle(title, w, 60);
+    double titleY = resolve(theme.getTitleY(), h);
+    drawTitle(title, w, titleY);
 
     String[] items = new String[] {
       (theme.getLabelNewGame() != null ? theme.getLabelNewGame() : Localization.t("menu.new_game")),
@@ -36,7 +37,11 @@ public class MenuRenderer {
     };
 
     drawMenuList(items, scene.getSelected(), w, h);
-    drawHints(Localization.t("common.select") + ": Enter    " + Localization.t("common.back") + ": Esc", w, h);
+    String hints = theme.getMainHintsText();
+    if (hints == null || hints.isBlank()) {
+      hints = Localization.t("common.select") + ": Enter    " + Localization.t("common.back") + ": Esc";
+    }
+    drawHints(hints, w, h);
   }
 
   public void renderSaveMenu(SaveMenuScene scene, double w, double h) {
@@ -149,11 +154,11 @@ public class MenuRenderer {
   }
 
   private void drawMenuList(String[] items, int selected, double w, double h) {
-    double yStart = h * 0.35;
-    double lineH = 40;
+    double yStart = resolve(theme.getListYStart(), h);
+    double lineH = theme.getLineHeight();
     for (int i = 0; i < items.length; i++) {
       boolean sel = i == selected;
-      String label = (sel ? "> " : "  ") + items[i];
+      String label = (sel ? theme.getItemSelectedPrefix() : theme.getItemPrefix()) + items[i];
       gc.setFill(sel ? theme.getItemSelectedColor() : theme.getItemColor());
       gc.setFont(theme.getItemFont());
       gc.fillText(label, (w - measure(label, theme.getItemFont())) / 2, yStart + i * lineH);
@@ -180,10 +185,10 @@ public class MenuRenderer {
 
   public int getHoverIndexForList(int count, double w, double h, double mouseX, double mouseY) {
     if (count <= 0) return -1;
-    double yStart = h * 0.35;
-    double lineH = 40;
+    double yStart = resolve(theme.getListYStart(), h);
+    double lineH = theme.getLineHeight();
     // Compute by vertical slot
-    double relY = mouseY - yStart + (lineH/2);
+    double relY = mouseY - yStart;
     if (relY < 0) return -1;
     int idx = (int) Math.floor(relY / lineH);
     if (idx < 0 || idx >= count) return -1;
@@ -284,5 +289,10 @@ public class MenuRenderer {
 
   private double clamp01(double v) {
     return v < 0 ? 0 : (v > 1 ? 1 : v);
+  }
+
+  private double resolve(double v, double total) {
+    // if v <= 1, treat as fraction of total; otherwise pixels
+    return v <= 1.0 ? (total * v) : v;
   }
 }

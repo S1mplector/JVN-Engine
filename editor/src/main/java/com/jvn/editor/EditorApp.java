@@ -253,6 +253,12 @@ public class EditorApp extends Application {
           tp.setProperty("hintFontFamily", "Arial");
           tp.setProperty("hintFontWeight", "NORMAL");
           tp.setProperty("hintFontSize", "14");
+          // layout defaults
+          tp.setProperty("titleY", "60");
+          tp.setProperty("listYStart", "0.35");
+          tp.setProperty("lineHeight", "40");
+          tp.setProperty("itemPrefix", "  ");
+          tp.setProperty("itemSelectedPrefix", "> ");
           tp.store(fos, "Menu Theme");
         }
       } else if ("jes".equalsIgnoreCase(type)) {

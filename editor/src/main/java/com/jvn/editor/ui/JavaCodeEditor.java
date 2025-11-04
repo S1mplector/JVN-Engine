@@ -11,9 +11,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.function.Consumer;
 
 public class JavaCodeEditor extends BorderPane {
   private final CodeArea codeArea = new CodeArea();
+  private Consumer<String> onTextChanged;
 
   private static final String[] KEYWORDS = new String[] {
     "abstract","assert","boolean","break","byte","case","catch","char","class","const","continue",
@@ -43,7 +45,7 @@ public class JavaCodeEditor extends BorderPane {
 
   public JavaCodeEditor() {
     codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-    codeArea.textProperty().addListener((obs, oldText, newText) -> applyHighlighting(newText));
+    codeArea.textProperty().addListener((obs, oldText, newText) -> { applyHighlighting(newText); if (onTextChanged != null) onTextChanged.accept(newText); });
     applyHighlighting("");
 
     VirtualizedScrollPane<CodeArea> sp = new VirtualizedScrollPane<>(codeArea);
@@ -58,6 +60,7 @@ public class JavaCodeEditor extends BorderPane {
 
   public String getText() { return codeArea.getText(); }
   public void setText(String s) { codeArea.replaceText(s == null ? "" : s); }
+  public void setOnTextChanged(Consumer<String> c) { this.onTextChanged = c; }
 
   private void applyHighlighting(String text) {
     codeArea.setStyleSpans(0, computeHighlighting(text == null ? "" : text));
