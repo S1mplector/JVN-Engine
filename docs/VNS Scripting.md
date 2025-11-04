@@ -332,6 +332,49 @@ sequenceDiagram
   VN->>VN: jump to @label after_game
 ```
 
+## Java interop from VNS
+
+You can invoke public static Java methods directly from VNS via the `java` provider handled by `DefaultVnInterop`.
+
+- **Syntax**
+```
+[java fully.qualified.Class#method arg1 arg2 ...]
+[call java fully.qualified.Class#method arg1 arg2 ...]
+```
+
+- **Argument parsing and coercion**
+- `true/false` → boolean
+- numbers with `.` → double; integers otherwise
+- anything else → string
+- At invocation, arguments are coerced to the target parameter types (`int`, `long`, `double`, `boolean`; else `String`).
+
+- **Resolution rules**
+- Only public static methods are supported.
+- Overload is resolved by name and arity (number of args).
+
+- **Result and errors**
+- Return value (if any) is shown as a temporary HUD message; it is not stored in VN variables.
+- Invalid targets or reflection errors are surfaced as `java: ...` HUD messages.
+
+- **Examples**
+```vns
+[java com.acme.Debug#toggle]
+[java com.acme.Util#sum 2 3]         # calls Util.sum(int,int)
+[call java com.acme.Log#info Started] # same as [java ...]
+```
+
+- **Limitations**
+- No quoting support; arguments cannot contain spaces.
+- Instance methods are not supported.
+- Prefer small utility entry points that validate inputs if exposing them to scripts.
+
+- **Combining with JES**
+- VNS can sequence both interops:
+```vns
+[java com.acme.Session#begin]
+[jes push game/minigames/brickbreaker.jes label after with difficulty=hard]
+```
+
 ## Example project
 
 See `demo-game/src/main/resources/game/scripts/` for `.vns` examples such as `demo.vns`. A minimal layout:

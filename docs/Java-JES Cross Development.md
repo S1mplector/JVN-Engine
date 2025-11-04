@@ -42,12 +42,13 @@ on key "R" do respawnCue            // calls Java respawn
 ```
 // In .jes
 timeline {
-  call "setPower" { p: 0.8 }
+  call "setPower"
   wait 500
-  call "playSfx" { name: "pocket" }
+  call "playSfx"
 }
 ```
-- `JesScene2D` looks up handlers registered via `registerCall("setPower", map -> ...)` and invokes them with the provided props.
+- `JesScene2D` looks up handlers registered via `registerCall("setPower", handler)` and invokes them.
+- Note: the current parser does not accept props for timeline `call` steps. To pass data, use input bindings or invoke `[jes call name k=v ...]` from VNS.
 
 ### Java side: handled actions/calls in billiards
 `BilliardsHybridScene` wires both bridging modes:
@@ -60,6 +61,48 @@ timeline {
   - `respawnCue`, `playSfx`, `setPower`
 
 Use whichever is more convenient in your JES file (binding vs timeline).
+
+## Driving Java × JES from VNS scripts
+
+You can orchestrate both Java and JES directly from VNS without writing a hybrid scene:
+
+- **Call Java (static) methods**
+```
+[java fully.qualified.Class#method arg1 arg2 ...]
+```
+  - Uses reflection via `DefaultVnInterop`. Arguments are parsed/coerced to primitive types when possible.
+
+- **Push/replace/pop JES scenes**
+```
+[jes push <script.jes> [label <returnLabel>] [with k=v ...]]
+[jes replace <script.jes> ...]
+[jes pop]
+```
+  - On launch, the runtime automatically calls `call "init" { ... }` in the JES scene with props from `with k=v`.
+  - Inside JES, `call "return" { label: L ... }` pops the scene, copies props to VN variables (except `label`/`goto`), and jumps to `L` (or the label passed on push).
+
+- **Invoke JES functions at runtime**
+```
+[jes call <name> k=v ...]
+```
+  - Invokes a handler registered in `JesScene2D` via `registerCall(name, handler)`.
+
+### End-to-end VNS snippet
+
+```vns
+@label start
+[java com.acme.Session#begin]
+Alice: Let’s play!
+[jes push game/minigames/brickbreaker.jes label after with difficulty=hard lives=3]
+
+@label after
+Alice: Welcome back!
+# At this point VN variables may contain values set by JES (e.g., score)
+```
+
+### Caveats
+- No quoting for arguments; spaces are not supported in `[java]` or `[jes call]` arguments.
+- No variable interpolation in command arguments; use simple scalars.
 
 ## Writing JES overlays
 A minimal overlay might include labels and a toggle for debug:

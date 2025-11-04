@@ -1,0 +1,193 @@
+/* Icon base */
+.icon {
+  -fx-min-width: 14px;
+  -fx-min-height: 14px;
+  -fx-pref-width: 14px;
+  -fx-pref-height: 14px;
+  -fx-max-width: 14px;
+  -fx-max-height: 14px;
+  -fx-background-insets: 0;
+  -fx-background-radius: 0;
+}
+
+/* Folder (Open) */
+.icon-open {
+  -fx-shape: "M1,5 L1,13 L15,13 L15,6 L9,6 L7,4 L1,4 Z";
+  -fx-background-color: #89b4fa;
+}
+/* Catppuccin Mocha palette */
+ /* Base #1e1e2e, Mantle #181825, Crust #11111b */
+ /* Text #cdd6f4, Subtext0 #a6adc8, Overlay0 #6c7086 */
+ /* Mauve #cba6f7, Green #a6e3a1, Peach #fab387, Blue #89b4fa, Sky #89dceb */
+
+ /* Code editors (RichTextFX CodeArea) */
+ .code-area {
+   -fx-background-color: #1e1e2e;
+   -fx-highlight-fill: #45475a;          /* selection background */
+   -fx-highlight-text-fill: #cdd6f4;      /* selection text */
+   -rtfx-caret-color: #f5e0dc;            /* caret color */
+   caret-color: #f5e0dc;                  /* compatibility hint */
+ }
+ .code-area .text {
+   -fx-fill: #cdd6f4;
+ }
+
+ .keyword {
+   -fx-fill: #cba6f7; /* Mauve */
+   -fx-font-weight: bold;
+ }
+
+ .string {
+   -fx-fill: #a6e3a1; /* Green */
+ }
+
+ .number {
+   -fx-fill: #fab387; /* Peach */
+ }
+
+ .comment {
+   -fx-fill: #6c7086; /* Overlay0 */
+ }
+
+ .punct {
+   -fx-fill: #89b4fa; /* Blue */
+ }
+
+ .error {
+   -fx-underline: true;
+   -fx-fill: #f38ba8; /* red accent */
+ }
+
+ /* Line numbers (RichTextFX LineNumberFactory) */
+ .lineno {
+   -fx-background-color: #181825; /* Mantle */
+   -fx-padding: 0 8 0 8;
+ }
+ .lineno .text { -fx-fill: #a6adc8; }
+
+/* Ensure virtualized scroll pane and content are transparent to show editor bg */
+.virtualized-scroll-pane,
+.virtualized-scroll-pane .viewport,
+.virtualized-scroll-pane .content,
+.virtualized-scroll-pane * {
+  -fx-background-color: transparent;
+}
+
+/* TabPane dark styling */
+.tab-pane *.tab-header-area, .tab-pane .tab-header-background { -fx-background-color: #181825; }
+.tab-pane .tab { -fx-background-color: #181825; }
+.tab-pane .tab:selected { -fx-background-color: #313244; }
+.tab-pane .tab-label { -fx-text-fill: #cdd6f4; }
+.tab-pane .tab:selected .tab-label { -fx-text-fill: #cdd6f4; }
+.tab-pane .tab-content-area { -fx-background-color: #1e1e2e; }
+
+/* Scrollbars */
+.scroll-bar { -fx-background-color: #181825; }
+.scroll-bar .track { -fx-background-color: #181825; }
+.scroll-bar .thumb { -fx-background-color: #585b70; -fx-background-insets: 0; -fx-background-radius: 4; }
+
+/* Root and common containers */
+.root, .border-pane, .pane, .vbox, .hbox {
+  -fx-background-color: #1e1e2e;
+}
+.scroll-pane { -fx-background: #1e1e2e; -fx-background-color: #1e1e2e; }
+.scroll-pane > .viewport { -fx-background-color: #1e1e2e; }
+.split-pane { -fx-background-color: #1e1e2e; }
+.split-pane-divider { -fx-background-color: #313244; -fx-padding: 0.25em; }
+
+/* Menu bar */
+.menu-bar { -fx-background-color: #181825; }
+.menu-bar .label { -fx-text-fill: #cdd6f4; }
+.context-menu { -fx-background-color: #181825; }
+.menu-item:focused { -fx-background-color: #313244; }
+.menu-item .label { -fx-text-fill: #cdd6f4; }
+
+/* Buttons */
+.button {
+  -fx-background-color: #313244;
+  -fx-text-fill: #cdd6f4;
+  -fx-background-radius: 6;
+  -fx-border-color: transparent;
+}
+.button:hover { -fx-background-color: #45475a; }
+.button:armed { -fx-background-color: #585b70; }
+.button:focused { -fx-effect: dropshadow(gaussian, rgba(203,166,247,0.35), 8, 0, 0, 0); }
+
+/* Labels */
+.label { -fx-text-fill: #cdd6f4; }
+
+/* Text inputs */
+.text-input, .text-field, .text-area {
+  -fx-background-color: #181825; /* bg */
+  -fx-text-fill: #cdd6f4;        /* text */
+  -fx-highlight-fill: #45475a;   /* selection */
+  -fx-highlight-text-fill: #cdd6f4;
+  -fx-background-insets: 0;
+  -fx-background-radius: 6;
+}
+.text-area .content { -fx-background-color: #181825; }
+.text-input:focused, .text-field:focused, .text-area:focused {
+  -fx-border-color: #cba6f7;
+  -fx-border-radius: 6;
+  -fx-border-width: 1;
+}
+.text-input .prompt-text, .text-field .prompt-text, .text-area .prompt-text { -fx-fill: #6c7086; }
+
+/* ListView */
+.list-view { -fx-background-color: #1e1e2e; }
+.list-cell { -fx-background-color: #1e1e2e; -fx-text-fill: #cdd6f4; }
+.list-cell:filled:selected, .list-cell:filled:selected:hover { -fx-background-color: #313244; -fx-text-fill: #cdd6f4; }
+.list-cell:even { -fx-background-color: #1e1e2e; }
+.list-cell:odd { -fx-background-color: #1e1e2e; }
+.virtual-flow, .virtual-flow .clipped-container, .virtual-flow .sheet { -fx-background-color: #1e1e2e; }
+
+/* TreeView */
+.tree-view { -fx-background-color: #1e1e2e; }
+.tree-cell { -fx-background-color: #1e1e2e; -fx-text-fill: #cdd6f4; }
+.tree-cell:filled:selected, .tree-cell:filled:selected:hover { -fx-background-color: #313244; -fx-text-fill: #cdd6f4; }
+
+/* TitledPane/Accordion */
+.titled-pane > .title { -fx-background-color: #181825; }
+.titled-pane > .content { -fx-background-color: #1e1e2e; }
+
+/* Separator */
+.separator .line { -fx-background-color: #313244; -fx-border-color: #313244; }
+
+/* Default text color safety */
+.root, .label, .text { -fx-text-fill: #cdd6f4; }
+
+/* Reload (circular arrow) */
+.icon-reload {
+  -fx-shape: "M8,2 A6,6 0 1,1 2,8 L4,8 L1,11 L1,7 L2,7 A6,6 0 1,0 8,2 Z";
+  -fx-background-color: #a5d6ff;
+}
+
+/* Apply (check) */
+.icon-apply {
+  -fx-shape: "M2,8 L6,12 L14,3 L12,3 L6,9 L4,7 Z";
+  -fx-background-color: #c678dd;
+}
+
+/* Fit (four corners) */
+.icon-fit {
+  -fx-shape: "M3,3 L7,3 L7,2 L2,2 L2,7 L3,7 Z M13,3 L9,3 L9,2 L14,2 L14,7 L13,7 Z M3,13 L7,13 L7,14 L2,14 L2,9 L3,9 Z M13,13 L9,13 L9,14 L14,14 L14,9 L13,9 Z";
+  -fx-background-color: #56b6c2;
+}
+
+/* Reset (counterclockwise arrow) */
+.icon-reset {
+  -fx-shape: "M8,2 A6,6 0 1,1 2,8 L4,8 L1,11 L1,7 L2,7 A6,6 0 1,0 8,2 Z";
+  -fx-background-color: #e5c07b;
+}
+
+/* Logo */
+.jvn-logo {
+  -fx-min-width: 18px;
+  -fx-min-height: 18px;
+  -fx-pref-width: 18px;
+  -fx-pref-height: 18px;
+  -fx-max-width: 18px;
+  -fx-max-height: 18px;
+  -fx-shape: "M9,1 L16,9 L9,17 L2,9 Z";
+  -fx-background-color: linear-gradient(to bottom right, #58a6ff, #8b5cf6);
+}
