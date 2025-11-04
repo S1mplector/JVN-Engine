@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 public class FileEditorTab extends BorderPane {
-  public enum Kind { JES, VNS, JAVA, TIMELINE, OTHER }
+  public enum Kind { JES, VNS, JAVA, TIMELINE, THEME, OTHER }
 
   private final File file;
   private final Kind kind;
@@ -28,12 +28,14 @@ public class FileEditorTab extends BorderPane {
   private final VnsCodeEditor vnsEditor;
   private final JavaCodeEditor javaEditor;
   private final TimelineCodeEditor timelineEditor;
+  private final JavaCodeEditor themeEditor;
   private final StoryTimelineView timelineView;
 
   private final ViewportView viewport; // JES preview
   private JesScene2D jesScene;
 
   private final VnPreviewView vnPreview; // VNS preview
+  private final MenuThemePreviewView themePreview; // THEME preview
 
   private Consumer<Entity2D> onSelected;
   private Consumer<String> onStatus;
@@ -47,16 +49,19 @@ public class FileEditorTab extends BorderPane {
     else if (name.endsWith(".vns")) this.kind = Kind.VNS;
     else if (name.endsWith(".java")) this.kind = Kind.JAVA;
     else if (name.endsWith(".timeline")) this.kind = Kind.TIMELINE;
+    else if (name.endsWith(".theme") || "menu.theme".equals(name)) this.kind = Kind.THEME;
     else this.kind = Kind.OTHER;
 
     this.jesEditor = (kind == Kind.JES) ? new JesCodeEditor() : null;
     this.vnsEditor = (kind == Kind.VNS) ? new VnsCodeEditor() : null;
     this.javaEditor = (kind == Kind.JAVA) ? new JavaCodeEditor() : null;
     this.timelineEditor = (kind == Kind.TIMELINE) ? new TimelineCodeEditor() : null;
+    this.themeEditor = (kind == Kind.THEME) ? new JavaCodeEditor() : null;
     this.timelineView = (kind == Kind.TIMELINE) ? new StoryTimelineView() : null;
 
     this.viewport = (kind == Kind.JES) ? new ViewportView() : null;
     this.vnPreview = (kind == Kind.VNS) ? new VnPreviewView() : null;
+    this.themePreview = (kind == Kind.THEME) ? new MenuThemePreviewView() : null;
 
     if (viewport != null) {
       viewport.setOnSelected(e -> { if (onSelected != null) onSelected.accept(e); });
@@ -80,6 +85,10 @@ public class FileEditorTab extends BorderPane {
       if (file != null) timelineView.setTimelineFile(file);
       timelineEditor.setOnTextChanged(text -> timelineView.fromText(text));
       timelineView.setOnChanged(() -> timelineEditor.setTextNoEvent(timelineView.toDsl()));
+    } else if (kind == Kind.THEME) {
+      String text = themeEditor.getText();
+      if (text == null) text = "";
+      themePreview.setThemeFromText(text);
     }
   }
 
@@ -116,6 +125,12 @@ public class FileEditorTab extends BorderPane {
       sp.getItems().addAll(timelineView, timelineEditor);
       sp.setDividerPositions(0.6);
       setCenter(sp);
+    } else if (kind == Kind.THEME) {
+      SplitPane sp = new SplitPane();
+      sp.setOrientation(javafx.geometry.Orientation.VERTICAL);
+      sp.getItems().addAll(themePreview, themeEditor);
+      sp.setDividerPositions(0.6);
+      setCenter(sp);
     } else {
       setCenter(new javafx.scene.control.Label("Unsupported file type"));
     }
@@ -144,12 +159,15 @@ public class FileEditorTab extends BorderPane {
       viewport.render(dt);
     } else if (kind == Kind.VNS && vnPreview != null) {
       vnPreview.render(dt);
+    } else if (kind == Kind.THEME && themePreview != null) {
+      themePreview.render(dt);
     }
   }
 
   public void setSize(double w, double h) {
     if (viewport != null) viewport.setSize(w, h * 0.6);
     if (vnPreview != null) vnPreview.setSize(w, h * 0.6);
+    if (themePreview != null) themePreview.setSize(w, h * 0.6);
   }
 
   public void apply() throws Exception {
@@ -195,6 +213,10 @@ public class FileEditorTab extends BorderPane {
         String text = Files.exists(file.toPath()) ? Files.readString(file.toPath()) : "";
         if (timelineEditor != null) timelineEditor.setText(text);
         if (timelineView != null) timelineView.fromText(text);
+      } else if (kind == Kind.THEME) {
+        String text = Files.exists(file.toPath()) ? Files.readString(file.toPath()) : "";
+        if (themeEditor != null) themeEditor.setText(text);
+        if (themePreview != null) themePreview.setThemeFromText(text);
       } else if (kind == Kind.JAVA) {
         String code = Files.readString(file.toPath());
         javaEditor.setText(code);
@@ -215,6 +237,9 @@ public class FileEditorTab extends BorderPane {
         try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
       } else if (kind == Kind.TIMELINE) {
         String content = timelineEditor.getText();
+        try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
+      } else if (kind == Kind.THEME) {
+        String content = themeEditor.getText();
         try (FileWriter fw = new FileWriter(target)) { fw.write(content); }
       } else if (kind == Kind.JAVA) {
         String content = javaEditor.getText();

@@ -449,7 +449,7 @@ public class EditorApp extends Application {
     projView.setOnOpenFile(f -> {
       if (f == null) return;
       String name = f.getName().toLowerCase();
-      if (name.endsWith(".jes") || name.endsWith(".txt") || name.endsWith(".vns") || name.endsWith(".java") || name.endsWith(".timeline")) {
+      if (name.endsWith(".jes") || name.endsWith(".txt") || name.endsWith(".vns") || name.endsWith(".java") || name.endsWith(".timeline") || name.endsWith(".theme") || "menu.theme".equals(name)) {
         openFile(f);
       } else {
         try { java.awt.Desktop.getDesktop().open(f); } catch (Exception ignored) {}
