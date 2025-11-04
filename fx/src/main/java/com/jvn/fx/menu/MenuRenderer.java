@@ -10,28 +10,29 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 import javafx.scene.image.Image;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 
 import java.util.List;
 import java.io.File;
 
 public class MenuRenderer {
   private final GraphicsContext gc;
-  private final Font titleFont = Font.font("Arial", FontWeight.BOLD, 32);
-  private final Font itemFont = Font.font("Arial", FontWeight.NORMAL, 20);
-  private final Font hintFont = Font.font("Arial", FontWeight.NORMAL, 14);
+  private MenuTheme theme;
 
-  public MenuRenderer(GraphicsContext gc) { this.gc = gc; }
+  public MenuRenderer(GraphicsContext gc) { this.gc = gc; this.theme = MenuTheme.defaults(); }
+  public MenuRenderer(GraphicsContext gc, MenuTheme theme) { this.gc = gc; this.theme = (theme == null ? MenuTheme.defaults() : theme); }
+  public void setTheme(MenuTheme t) { this.theme = (t == null ? MenuTheme.defaults() : t); }
 
   public void renderMainMenu(MainMenuScene scene, double w, double h) {
     clear(w, h);
-    drawTitle(Localization.t("app.title"), w, 60);
+    String title = theme.getTitleText();
+    if (title == null || title.isBlank()) title = Localization.t("app.title");
+    drawTitle(title, w, 60);
 
     String[] items = new String[] {
-      Localization.t("menu.new_game"),
-      Localization.t("menu.load"),
-      Localization.t("menu.settings"),
-      Localization.t("menu.quit")
+      (theme.getLabelNewGame() != null ? theme.getLabelNewGame() : Localization.t("menu.new_game")),
+      (theme.getLabelLoad() != null ? theme.getLabelLoad() : Localization.t("menu.load")),
+      (theme.getLabelSettings() != null ? theme.getLabelSettings() : Localization.t("menu.settings")),
+      (theme.getLabelQuit() != null ? theme.getLabelQuit() : Localization.t("menu.quit"))
     };
 
     drawMenuList(items, scene.getSelected(), w, h);
@@ -66,7 +67,7 @@ public class MenuRenderer {
     drawTitle(Localization.t("load.title"), w, 60);
     List<String> saves = scene.getSaves();
     if (saves.isEmpty()) {
-      drawCenteredText(Localization.t("load.no_saves"), w, h/2, itemFont, Color.GRAY);
+      drawCenteredText(Localization.t("load.no_saves"), w, h/2, theme.getItemFont(), Color.GRAY);
     } else {
       drawMenuList(saves.toArray(new String[0]), scene.getSelected(), w * 0.6, h);
       File thumb = getThumbnailFile(scene);
@@ -136,15 +137,15 @@ public class MenuRenderer {
   }
 
   private void clear(double w, double h) {
-    gc.setFill(Color.rgb(10, 12, 18));
+    gc.setFill(theme.getBackgroundColor());
     gc.fillRect(0, 0, w, h);
   }
 
   private void drawTitle(String text, double w, double y) {
     if (text == null || text.isBlank()) text = "JVN";
-    gc.setFill(Color.WHITE);
-    gc.setFont(titleFont);
-    gc.fillText(text, (w - measure(text, titleFont)) / 2, y);
+    gc.setFill(theme.getTitleColor());
+    gc.setFont(theme.getTitleFont());
+    gc.fillText(text, (w - measure(text, theme.getTitleFont())) / 2, y);
   }
 
   private void drawMenuList(String[] items, int selected, double w, double h) {
@@ -153,16 +154,16 @@ public class MenuRenderer {
     for (int i = 0; i < items.length; i++) {
       boolean sel = i == selected;
       String label = (sel ? "> " : "  ") + items[i];
-      gc.setFill(sel ? Color.YELLOW : Color.LIGHTGRAY);
-      gc.setFont(itemFont);
-      gc.fillText(label, (w - measure(label, itemFont)) / 2, yStart + i * lineH);
+      gc.setFill(sel ? theme.getItemSelectedColor() : theme.getItemColor());
+      gc.setFont(theme.getItemFont());
+      gc.fillText(label, (w - measure(label, theme.getItemFont())) / 2, yStart + i * lineH);
     }
   }
 
   private void drawHints(String text, double w, double h) {
-    gc.setFill(Color.rgb(200,200,200,0.8));
-    gc.setFont(hintFont);
-    gc.fillText(text, (w - measure(text, hintFont)) / 2, h - 20);
+    gc.setFill(theme.getHintColor());
+    gc.setFont(theme.getHintFont());
+    gc.fillText(text, (w - measure(text, theme.getHintFont())) / 2, h - 20);
   }
 
   private void drawCenteredText(String text, double w, double y, Font font, Color color) {
@@ -240,8 +241,8 @@ public class MenuRenderer {
     gc.setFill(Color.rgb(255,255,255,0.1));
     gc.fillRoundRect(panelX - 8, panelY - 8, panelW + 16, panelH + 16, 12, 12);
     gc.setFill(Color.GRAY);
-    gc.setFont(itemFont);
-    drawCenteredText(Localization.t("load.no_preview"), panelX + panelW/2, panelY + panelH/2, itemFont, Color.GRAY);
+    gc.setFont(theme.getItemFont());
+    drawCenteredText(Localization.t("load.no_preview"), panelX + panelW/2, panelY + panelH/2, theme.getItemFont(), Color.GRAY);
   }
 
   private void drawPreviewMetadata(String scenarioId, Long timestampMs, Integer nodeIndex, double w, double h) {
@@ -250,7 +251,7 @@ public class MenuRenderer {
     double panelH = h * 0.5;
     double textY = panelY + panelH + 20;
     gc.setFill(Color.LIGHTGRAY);
-    gc.setFont(hintFont);
+    gc.setFont(theme.getHintFont());
     String ts = timestampMs != null ? formatTimestamp(timestampMs) : "";
     String line1 = (ts.isEmpty() ? "" : ts);
     String line2 = (scenarioId != null ? (Localization.t("meta.scenario") + ": " + scenarioId) : "");
@@ -273,7 +274,7 @@ public class MenuRenderer {
     double h = 8;
     gc.setFill(Color.rgb(255,255,255,0.15));
     gc.fillRoundRect(x, y, w, h, 6, 6);
-    gc.setFill(highlight ? Color.YELLOW : Color.LIGHTGRAY);
+    gc.setFill(highlight ? theme.getItemSelectedColor() : theme.getItemColor());
     double fill = Math.max(0, Math.min(1, value01));
     gc.fillRoundRect(x, y, w * fill, h, 6, 6);
     double knobX = x + w * fill - 6;

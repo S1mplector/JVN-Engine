@@ -54,6 +54,7 @@ public class EditorApp extends Application {
   private ProjectExplorerView projView;
   private StoryTimelineView timelineView;
   private SettingsEditorView settingsEditor;
+  private com.jvn.editor.ui.MenuThemeEditorView menuThemeEditor;
   private final CommandStack commands = new CommandStack();
   private Tab tabProject;
   private Tab tabScene;
@@ -129,6 +130,7 @@ public class EditorApp extends Application {
       if (projView != null) projView.setRootDirectory(root);
       if (timelineView != null) timelineView.setProjectRoot(root);
       if (settingsEditor != null) settingsEditor.setProjectRoot(root);
+      if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(root);
     }
     return root;
   }
@@ -233,6 +235,26 @@ public class EditorApp extends Application {
           sp.setProperty("skipAfterChoices", "false");
           sp.store(fos, "VN Settings");
         }
+        // default menu theme
+        try (FileOutputStream fos = new FileOutputStream(new File(dir, "scripts/menu.theme"))) {
+          Properties tp = new Properties();
+          tp.setProperty("backgroundColor", "#0A0C12");
+          tp.setProperty("titleColor", "#FFFFFF");
+          tp.setProperty("itemColor", "#D3D3D3");
+          tp.setProperty("itemSelectedColor", "#FFFF00");
+          tp.setProperty("hintColor", "rgba(200,200,200,0.8)");
+          tp.setProperty("accentColor", "#FFFF00");
+          tp.setProperty("titleFontFamily", "Arial");
+          tp.setProperty("titleFontWeight", "BOLD");
+          tp.setProperty("titleFontSize", "32");
+          tp.setProperty("itemFontFamily", "Arial");
+          tp.setProperty("itemFontWeight", "NORMAL");
+          tp.setProperty("itemFontSize", "20");
+          tp.setProperty("hintFontFamily", "Arial");
+          tp.setProperty("hintFontWeight", "NORMAL");
+          tp.setProperty("hintFontSize", "14");
+          tp.store(fos, "Menu Theme");
+        }
       } else if ("jes".equalsIgnoreCase(type)) {
         p.setProperty("type", "jes");
         p.setProperty("entry", "scripts/main.jes");
@@ -253,6 +275,7 @@ public class EditorApp extends Application {
       this.projectRoot = dir; if (projView != null) projView.setRootDirectory(dir);
       if (timelineView != null) { timelineView.setProjectRoot(dir); timelineView.setTimelineFile(new File(dir, "story.timeline")); }
       if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
+      if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(dir);
       status.setText("Created project: " + name);
     } catch (Exception ex) {
       status.setText("Create project failed");
@@ -385,11 +408,13 @@ public class EditorApp extends Application {
     inspectorScroll.setFitToWidth(true);
     timelineView = new StoryTimelineView();
     settingsEditor = new SettingsEditorView();
+    menuThemeEditor = new com.jvn.editor.ui.MenuThemeEditorView();
     TabPane rightTabs = new TabPane();
     Tab tabInspectorRight = new Tab("Inspector", inspectorScroll); tabInspectorRight.setClosable(false);
     Tab tabTimeline = new Tab("Timeline", timelineView); tabTimeline.setClosable(false);
     Tab tabSettings = new Tab("Settings", settingsEditor); tabSettings.setClosable(false);
-    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline, tabSettings);
+    Tab tabMenuTheme = new Tab("Menu Theme", menuThemeEditor); tabMenuTheme.setClosable(false);
+    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline, tabSettings, tabMenuTheme);
     rightTabs.setPrefWidth(360);
     root.setRight(rightTabs);
     timelineView.setOnRunArc(a -> {
@@ -487,6 +512,7 @@ public class EditorApp extends Application {
     if (projView != null) projView.setRootDirectory(dir);
     if (timelineView != null) { timelineView.setProjectRoot(dir); String tf = loadManifest(dir) != null ? loadManifest(dir).getProperty("timeline", "story.timeline") : "story.timeline"; timelineView.setTimelineFile(new File(dir, tf)); }
     if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
+    if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(dir);
     applyProjectRootToTabs();
     status.setText("Project: " + dir.getName());
   }

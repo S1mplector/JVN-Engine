@@ -9,6 +9,7 @@ import com.jvn.core.menu.SettingsScene;
 import com.jvn.core.menu.SaveMenuScene;
 import com.jvn.fx.vn.VnRenderer;
 import com.jvn.fx.menu.MenuRenderer;
+import com.jvn.fx.menu.MenuTheme;
 import com.jvn.core.scene2d.Scene2D;
 import com.jvn.fx.scene2d.FxBlitter2D;
 import com.jvn.core.scene2d.Scene2DBase;
@@ -89,7 +90,7 @@ public class FxLauncher extends Application {
     // Initialize graphics context and resize canvas with scene
     this.gc = this.canvas.getGraphicsContext2D();
     this.vnRenderer = new VnRenderer(gc);
-    this.menuRenderer = new MenuRenderer(gc);
+    this.menuRenderer = new MenuRenderer(gc, MenuTheme.fromAssets());
     this.blitter2D = new FxBlitter2D(gc);
     scene.widthProperty().addListener((obs, ov, nv) -> this.canvas.setWidth(nv.doubleValue()));
     scene.heightProperty().addListener((obs, ov, nv) -> this.canvas.setHeight(nv.doubleValue()));

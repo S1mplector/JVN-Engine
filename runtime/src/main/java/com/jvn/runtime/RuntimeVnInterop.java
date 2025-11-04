@@ -5,6 +5,8 @@ import com.jvn.core.assets.AssetType;
 import com.jvn.core.engine.Engine;
 import com.jvn.core.menu.MainMenuScene;
 import com.jvn.core.menu.SettingsScene;
+import com.jvn.core.menu.SaveMenuScene;
+import com.jvn.core.menu.LoadMenuScene;
 import com.jvn.core.scene.Scene;
 import com.jvn.core.vn.*;
 import com.jvn.core.vn.script.VnScriptParser;
@@ -165,6 +167,17 @@ public class RuntimeVnInterop implements VnInterop {
       case "settings": {
         VnSettings s = scene.getState().getSettings();
         SettingsScene m = new SettingsScene(s, scene.getAudioFacade());
+        engine.scenes().push(m);
+        return VnInteropResult.advance();
+      }
+      case "save": {
+        SaveMenuScene m = new SaveMenuScene(engine, new com.jvn.core.vn.save.VnSaveManager(), scene);
+        engine.scenes().push(m);
+        return VnInteropResult.advance();
+      }
+      case "load": {
+        String defScript = toks.length >= 2 ? toks[1] : "demo.vns";
+        LoadMenuScene m = new LoadMenuScene(engine, new com.jvn.core.vn.save.VnSaveManager(), defScript, scene.getState().getSettings(), scene.getAudioFacade());
         engine.scenes().push(m);
         return VnInteropResult.advance();
       }
