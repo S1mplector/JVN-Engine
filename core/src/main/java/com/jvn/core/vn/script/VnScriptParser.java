@@ -31,6 +31,7 @@ public class VnScriptParser {
   private static final Pattern SCENARIO_PATTERN = Pattern.compile("^@scenario\\s+(.+)$");
   private static final Pattern CHARACTER_PATTERN = Pattern.compile("^@character\\s+(\\S+)\\s+\"([^\"]+)\"$");
   private static final Pattern BACKGROUND_PATTERN = Pattern.compile("^@background\\s+(\\S+)\\s+(.+)$");
+  private static final Pattern CHARIMG_PATTERN = Pattern.compile("^@charimg\\s+(\\S+)\\s+(\\S+)\\s+(.+)$");
   private static final Pattern LABEL_PATTERN = Pattern.compile("^@label\\s+(.+)$");
   private static final Pattern DIALOGUE_PATTERN = Pattern.compile("^([^:]+):\\s*(.+)$");
   private static final Pattern CHOICE_PATTERN = Pattern.compile("^>\\s*(.+?)(?:\\s*->\\s*(.+))?$");
@@ -45,6 +46,9 @@ public class VnScriptParser {
     String line;
     int lineNumber = 0;
     
+    // Accumulate character definitions to allow expression mapping via @charimg
+    java.util.Map<String, com.jvn.core.vn.VnCharacter.Builder> charBuilders = new java.util.HashMap<>();
+
     while ((line = reader.readLine()) != null) {
       lineNumber++;
       line = line.trim();
@@ -71,6 +75,11 @@ public class VnScriptParser {
       if (charMatcher.matches()) {
         String id = charMatcher.group(1);
         String name = charMatcher.group(2);
+        // Track/merge builder so expressions from @charimg can be added later
+        com.jvn.core.vn.VnCharacter.Builder cb = charBuilders.get(id);
+        if (cb == null) { cb = com.jvn.core.vn.VnCharacter.builder(id); charBuilders.put(id, cb); }
+        cb.displayName(name);
+        // Keep compatibility by adding a simple character entry now (will be replaced at end if @charimg used)
         builder.addCharacter(id, name);
         continue;
       }
@@ -81,6 +90,18 @@ public class VnScriptParser {
         String id = bgMatcher.group(1);
         String path = bgMatcher.group(2);
         builder.addBackground(id, path);
+        continue;
+      }
+
+      // Character image mapping: @charimg <charId> <expression> <path>
+      Matcher imgMatcher = CHARIMG_PATTERN.matcher(line);
+      if (imgMatcher.matches()) {
+        String id = imgMatcher.group(1);
+        String expr = imgMatcher.group(2);
+        String path = imgMatcher.group(3);
+        com.jvn.core.vn.VnCharacter.Builder cb = charBuilders.get(id);
+        if (cb == null) { cb = com.jvn.core.vn.VnCharacter.builder(id); charBuilders.put(id, cb); }
+        cb.addExpression(expr, path);
         continue;
       }
       
@@ -307,6 +328,12 @@ public class VnScriptParser {
     }
     
     flushChoices(builder, pendingChoices);
+    // Finalize characters with expressions (replaces any earlier simple character entries)
+    if (charBuilders != null && builder != null) {
+      for (var e : charBuilders.entrySet()) {
+        builder.addCharacter(e.getValue().build());
+      }
+    }
     return builder.build();
   }
   

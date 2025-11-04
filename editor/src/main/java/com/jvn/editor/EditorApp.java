@@ -96,11 +96,13 @@ public class EditorApp extends Application {
       String entryLabel = mf.getProperty("entryLabel", "start");
       File f = new File(root, entryVns);
       if (f.exists()) {
-        openVnsFile(f);
+        // Set project root first so newly opened tabs inherit it
         this.projectRoot = root;
         if (projView != null) projView.setRootDirectory(root);
         if (timelineView != null) timelineView.setProjectRoot(root);
         if (settingsEditor != null) settingsEditor.setProjectRoot(root);
+        openVnsFile(f);
+        applyProjectRootToTabs();
         javafx.application.Platform.runLater(() -> { FileEditorTab ft = getActiveFileTab(); if (ft != null) ft.runFromLabel(entryLabel); });
         status.setText("Opened VN project: " + root.getName());
       } else {

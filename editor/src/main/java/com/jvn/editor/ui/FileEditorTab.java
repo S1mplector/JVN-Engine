@@ -152,6 +152,7 @@ public class FileEditorTab extends BorderPane {
     if (vnsEditor != null) vnsEditor.setProjectRoot(root);
     if (timelineEditor != null) timelineEditor.setProjectRoot(root);
     if (timelineView != null) timelineView.setProjectRoot(root);
+    if (vnPreview != null) vnPreview.setProjectRoot(root);
   }
 
   public void setCommandStack(com.jvn.editor.commands.CommandStack cs) {

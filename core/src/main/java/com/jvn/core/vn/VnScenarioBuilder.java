@@ -38,6 +38,14 @@ public class VnScenarioBuilder {
     return this;
   }
 
+  /**
+   * Add a fully built character. If a character with the same id already exists, it will be replaced.
+   */
+  public VnScenarioBuilder addCharacter(VnCharacter character) {
+    scenarioBuilder.addCharacter(character);
+    return this;
+  }
+
   public VnScenarioBuilder addBackground(String id, String imagePath) {
     scenarioBuilder.addBackground(new VnBackground(id, imagePath));
     return this;

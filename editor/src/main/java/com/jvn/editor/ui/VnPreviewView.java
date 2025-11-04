@@ -11,6 +11,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.StackPane;
+import java.io.File;
 
 public class VnPreviewView extends StackPane {
   private final Canvas canvas = new Canvas(1200, 740);
@@ -71,6 +72,10 @@ public class VnPreviewView extends StackPane {
       this.scene.getState().jumpToLabel(label);
       this.scene.onEnter();
     }
+  }
+
+  public void setProjectRoot(File root) {
+    if (renderer != null) renderer.setProjectRoot(root);
   }
 
   public void setSize(double w, double h) {

@@ -7,6 +7,7 @@ import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import java.io.File;
 
 import java.util.HashMap;
 import java.util.List;
@@ -41,6 +42,10 @@ public class VnRenderer {
     this.dialogueFont = Font.font("Arial", FontWeight.NORMAL, 16);
     this.choiceFont = Font.font("Arial", FontWeight.NORMAL, 16);
   }
+
+  // Optional base directory used to resolve asset paths from filesystem (editor preview)
+  private File projectRoot;
+  public void setProjectRoot(File root) { this.projectRoot = root; }
 
   private void renderHistoryOverlay(VnState state, double width, double height) {
     gc.setFill(Color.rgb(0, 0, 0, 0.75));
@@ -472,6 +477,25 @@ public class VnRenderer {
         var url = getClass().getClassLoader().getResource(p);
         if (url != null) {
           return new Image(url.toExternalForm());
+        }
+        // Fallback: filesystem (absolute or relative to project root)
+        // 1) Absolute or working-directory-relative
+        File f = new File(p);
+        if (f.exists()) {
+          return new Image(f.toURI().toString());
+        }
+        // 2) Relative to project root (if provided)
+        if (projectRoot != null) {
+          // If path starts with the project directory name, strip it
+          String normalized = p.replace('\\', '/');
+          String rootName = projectRoot.getName();
+          if (normalized.startsWith(rootName + "/")) {
+            normalized = normalized.substring(rootName.length() + 1);
+          }
+          File pf = new File(projectRoot, normalized);
+          if (pf.exists()) {
+            return new Image(pf.toURI().toString());
+          }
         }
       } catch (Exception e) {
         System.err.println("Failed to load image: " + path);
