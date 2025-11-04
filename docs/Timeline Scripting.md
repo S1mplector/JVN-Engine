@@ -4,6 +4,20 @@ This document describes the Timeline DSL used by the Editor to organize visual-n
 
 The timeline is saved as `story.timeline` alongside your project, and can be edited visually (graph) or as text (Timeline editor).
 
+## Quickstart
+
+- Create a minimal `story.timeline` at your project root:
+  ```
+  arc "Intro" script "game/scripts/demo.vns" entry "start" at 40,40
+  arc "Chapter1" script "game/scripts/ch1.vns" at 260,40
+  link Intro -> Chapter1
+  ```
+- Open the Editor and load your project folder (see `docs/Editor.md`).
+  - Switch to the Timeline view to see arcs and links.
+  - Drag nodes to arrange, assign clusters, and add more links.
+- Author the referenced `.vns` files; see `docs/VNS Scripting.md`.
+- If you launch JES scenes from VNS, see `docs/JES Scripting.md`.
+
 ## Core concepts
 
 - **Arc**

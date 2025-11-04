@@ -2,6 +2,28 @@
 
 JES (JVN Engine Script) is a small DSL for scenes, entities, components, input, and timelines.
 
+## Quickstart
+
+- Create a JES file, e.g. `game/minigames/brickbreaker.jes`:
+  ```jes
+  scene "Demo" {
+    entity "title" { component Label2D { text: "Hello JES" x: 60 y: 80 size: 24 } }
+  }
+  ```
+- Run directly via runtime:
+  ```bash
+  ./gradlew :runtime:run --args="--jes game/minigames/brickbreaker.jes"
+  ```
+- Launch from a VNS script:
+  ```vns
+  [jes push game/minigames/brickbreaker.jes label after_game with difficulty=hard]
+  ```
+- Return to VNS from JES:
+  ```jes
+  call "return" { label: "after_game" score: 123 }
+  ```
+- See also: `docs/VNS Scripting.md` (calling JES) and `docs/Timeline Scripting.md` (narrative flow).
+
 ## Example
 
 ```jes

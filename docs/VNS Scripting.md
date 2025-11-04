@@ -4,6 +4,26 @@ This document describes the Visual Novel Script (VNS) format used by the engine 
 
 The parser lives at `core/src/main/java/com/jvn/core/vn/script/VnScriptParser.java`. All syntax below is based on its implementation.
 
+## Quickstart
+
+- Create a script under `game/scripts/`, e.g. `demo.vns`:
+  ```vns
+  @scenario demo
+  @label start
+  Alice: Hello VNS!
+  [end]
+  ```
+- Run the runtime with your script:
+  ```bash
+  ./gradlew :runtime:run --args="--script demo.vns"
+  ```
+- Optional: select audio backend
+  ```bash
+  ./gradlew :runtime:run --args="--script demo.vns --audio fx"      # default
+  ./gradlew :runtime:run --args="--script demo.vns --audio simp3"   # requires audio-engine installed
+  ```
+- See also: `docs/JES Scripting.md` (launching minigames) and `docs/Timeline Scripting.md` (branching graph).
+
 ## File structure overview
 
 - Lines are read top-to-bottom.
