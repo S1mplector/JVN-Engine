@@ -4,6 +4,8 @@ import com.jvn.core.vn.VnNodeType;
 import com.jvn.core.vn.VnScene;
 import com.jvn.core.vn.DefaultVnInterop;
 import com.jvn.core.vn.VnScenario;
+import com.jvn.core.audio.AudioFacade;
+import com.jvn.fx.audio.FxAudioService;
 import com.jvn.fx.vn.VnRenderer;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -19,6 +21,8 @@ public class VnPreviewView extends StackPane {
   private VnRenderer renderer = new VnRenderer(gc);
   private VnScene scene;
   private double mouseX, mouseY;
+  private FxAudioService audio;
+  private java.io.File projectRoot;
 
   public VnPreviewView() {
     getChildren().add(canvas);
@@ -63,6 +67,10 @@ public class VnPreviewView extends StackPane {
     if (scenario == null) { this.scene = null; return; }
     this.scene = new VnScene(scenario);
     this.scene.setInterop(new DefaultVnInterop());
+    // Ensure audio works in preview
+    if (audio == null) audio = new FxAudioService();
+    if (projectRoot != null) audio.setProjectRoot(projectRoot);
+    this.scene.setAudioFacade(audio);
     this.scene.onEnter();
   }
 
@@ -75,7 +83,10 @@ public class VnPreviewView extends StackPane {
   }
 
   public void setProjectRoot(File root) {
+    this.projectRoot = root;
     if (renderer != null) renderer.setProjectRoot(root);
+    if (audio != null) audio.setProjectRoot(root);
+    if (scene != null) scene.setAudioFacade(audio == null ? (audio = new FxAudioService()) : audio);
   }
 
   public void setSize(double w, double h) {

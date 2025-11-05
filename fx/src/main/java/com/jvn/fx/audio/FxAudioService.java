@@ -6,6 +6,7 @@ import com.jvn.core.audio.AudioFacade;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 
+import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -17,14 +18,17 @@ public class FxAudioService implements AudioFacade {
   private float bgmVolume = 0.7f;
   private float sfxVolume = 0.8f;
   private float voiceVolume = 1.0f; // currently unused channel
+  private File projectRoot;
+
+  public void setProjectRoot(File root) { this.projectRoot = root; }
 
   @Override
   public void playBgm(String trackId, boolean loop) {
     stopBgm();
     try {
-      URL url = getClass().getClassLoader().getResource(AssetPaths.build(AssetType.AUDIO, trackId));
-      if (url == null) return;
-      Media media = new Media(url.toExternalForm());
+      String urlStr = resolveMediaUrl(trackId);
+      if (urlStr == null) return;
+      Media media = new Media(urlStr);
       bgmPlayer = new MediaPlayer(media);
       if (loop) bgmPlayer.setCycleCount(MediaPlayer.INDEFINITE);
       bgmPlayer.setVolume(clamp(bgmVolume));
@@ -48,9 +52,9 @@ public class FxAudioService implements AudioFacade {
   @Override
   public void playSfx(String sfxId) {
     try {
-      URL url = getClass().getClassLoader().getResource(AssetPaths.build(AssetType.AUDIO, sfxId));
-      if (url == null) return;
-      Media media = new Media(url.toExternalForm());
+      String urlStr = resolveMediaUrl(sfxId);
+      if (urlStr == null) return;
+      Media media = new Media(urlStr);
       MediaPlayer player = new MediaPlayer(media);
       player.setVolume(clamp(sfxVolume));
       player.setOnEndOfMedia(() -> {
@@ -124,5 +128,31 @@ public class FxAudioService implements AudioFacade {
     if (v < 0f) return 0.0;
     if (v > 1f) return 1.0;
     return v;
+  }
+
+  private String resolveMediaUrl(String id) {
+    try {
+      // 1) Classpath with asset routing (game/audio/...)
+      URL url = getClass().getClassLoader().getResource(AssetPaths.build(AssetType.AUDIO, id));
+      if (url != null) return url.toExternalForm();
+      // 2) Raw classpath path as provided
+      url = getClass().getClassLoader().getResource(id);
+      if (url != null) return url.toExternalForm();
+      // 3) Absolute or working-dir-relative file
+      File f = new File(id);
+      if (f.exists()) return f.toURI().toString();
+      // 4) Project-root-relative file
+      if (projectRoot != null) {
+        String normalized = id.replace('\\', '/');
+        String rootName = projectRoot.getName();
+        if (normalized.startsWith(rootName + "/")) {
+          normalized = normalized.substring(rootName.length() + 1);
+        }
+        File pf = new File(projectRoot, normalized);
+        if (pf.exists()) return pf.toURI().toString();
+      }
+    } catch (Exception ignored) {
+    }
+    return null;
   }
 }
