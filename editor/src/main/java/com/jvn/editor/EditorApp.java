@@ -2,24 +2,26 @@ package com.jvn.editor;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.util.Properties;
 
 import com.jvn.core.scene2d.Entity2D;
 import com.jvn.editor.commands.CommandStack;
-import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.FileEditorTab;
+import com.jvn.editor.ui.InspectorView;
 import com.jvn.editor.ui.ProjectExplorerView;
-import com.jvn.editor.ui.StoryTimelineView;
-import com.jvn.editor.ui.SettingsEditorView;
 import com.jvn.editor.ui.SceneGraphView;
+import com.jvn.editor.ui.SettingsEditorView;
+import com.jvn.editor.ui.StoryTimelineView;
 import com.jvn.scripting.jes.runtime.JesScene2D;
+
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -28,13 +30,16 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
-import javafx.scene.control.ContentDisplay;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -371,6 +376,7 @@ public class EditorApp extends Application {
 
     // Toolbar
     HBox toolbar = new HBox(8);
+    toolbar.getStyleClass().add("master-toolbar");
     Button btnOpen = new Button("Open"); btnOpen.setOnAction(e -> doOpen(primaryStage));
     Button btnReload = new Button("Reload"); btnReload.setOnAction(e -> doReload());
     Button btnApply = new Button("Apply Code"); btnApply.setOnAction(e -> applyCodeFromEditor());
@@ -394,11 +400,94 @@ public class EditorApp extends Application {
     btnReset.setGraphicTextGap(6);
     btnApply.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) applyCodeFromEditor(); });
     status = new Label("Ready");
-    Region logo = icon("jvn-logo");
-    toolbar.getChildren().addAll(logo, btnOpen, btnReload, btnApply, btnFit, btnReset, status);
+    Button btnSave = new Button("Save");
+    Button btnUndo = new Button("Undo");
+    Button btnRedo = new Button("Redo");
+    Button btnZoomIn = new Button("Zoom In");
+    Button btnZoomOut = new Button("Zoom Out");
+    Button btnZoomReset = new Button("100%");
+    Button btnPlay = new Button("Play");
+    Button btnStop = new Button("Stop");
+    Button btnSettings = new Button("Settings");
+    btnSave.setOnAction(e -> status.setText("Saved"));
+    btnUndo.setOnAction(e -> status.setText("Undo"));
+    btnRedo.setOnAction(e -> status.setText("Redo"));
+    btnZoomIn.setOnAction(e -> status.setText("Zoom In"));
+    btnZoomOut.setOnAction(e -> status.setText("Zoom Out"));
+    btnZoomReset.setOnAction(e -> status.setText("Zoom 100%"));
+    btnPlay.setOnAction(e -> status.setText("Play"));
+    btnStop.setOnAction(e -> status.setText("Stop"));
+    btnSettings.setOnAction(e -> status.setText("Settings"));
+    // Icons for second-row controls
+    btnSave.setGraphic(icon("icon", "icon-save"));
+    btnSave.setContentDisplay(ContentDisplay.RIGHT);
+    btnSave.setGraphicTextGap(6);
+    btnUndo.setGraphic(icon("icon", "icon-undo"));
+    btnUndo.setContentDisplay(ContentDisplay.RIGHT);
+    btnUndo.setGraphicTextGap(6);
+    btnRedo.setGraphic(icon("icon", "icon-redo"));
+    btnRedo.setContentDisplay(ContentDisplay.RIGHT);
+    btnRedo.setGraphicTextGap(6);
+    ImageView logo = new ImageView();
+    try {
+      // Try several likely filesystem locations relative to working dir
+      String[] rels = new String[] {
+        "docs/images/jvn_logo.png",
+        "../docs/images/jvn_logo.png",
+        "../../docs/images/jvn_logo.png",
+        "../../../docs/images/jvn_logo.png"
+      };
+      Image found = null;
+      for (String rp : rels) {
+        java.io.File f = new java.io.File(rp);
+        if (f.exists()) { found = new Image(f.toURI().toString()); break; }
+      }
+      if (found == null && projectRoot != null) {
+        // If a project root is known, search upward from it
+        java.io.File cur = projectRoot;
+        for (int i = 0; i < 4 && cur != null; i++) {
+          java.io.File candidate = new java.io.File(cur, "docs/images/jvn_logo.png");
+          if (candidate.exists()) { found = new Image(candidate.toURI().toString()); break; }
+          cur = cur.getParentFile();
+        }
+      }
+      if (found == null) {
+        var url = EditorApp.class.getResource("/docs/images/jvn_logo.png");
+        if (url != null) found = new Image(url.toExternalForm());
+      }
+      if (found != null) {
+        logo.setImage(found);
+        logo.setFitHeight(128);
+        logo.setPreserveRatio(true);
+        logo.setSmooth(true);
+        // Subtle light glow so it remains visible on black background
+        logo.setEffect(null);
+        HBox.setMargin(logo, new javafx.geometry.Insets(0, 10, 0, 0));
+      } else {
+        logo.setManaged(false);
+        logo.setVisible(false);
+      }
+    } catch (Exception ignored) {
+      logo.setManaged(false);
+      logo.setVisible(false);
+    }
+    Region spacer = new Region();
+    HBox.setHgrow(spacer, Priority.ALWAYS);
+    // Two fixed rows: first row core actions, second row Save/Undo/Redo
+    HBox row1 = new HBox(8);
+    HBox row2 = new HBox(8);
+    row1.getChildren().addAll(btnOpen, btnReload, btnApply, btnFit, btnReset);
+    row2.getChildren().addAll(btnSave, btnUndo, btnRedo, status);
+    VBox toolRows = new VBox(6);
+    toolRows.getChildren().addAll(row1, row2);
+    HBox.setHgrow(toolRows, Priority.ALWAYS);
+    toolbar.getChildren().clear();
+    if (logo.isManaged()) toolbar.getChildren().addAll(toolRows, spacer, logo);
+    else toolbar.getChildren().addAll(toolRows, spacer);
 
     // Layout
     BorderPane top = new BorderPane();
+    top.getStyleClass().add("master-toolbar");
     top.setTop(mb);
     top.setCenter(toolbar);
     root.setTop(top);
