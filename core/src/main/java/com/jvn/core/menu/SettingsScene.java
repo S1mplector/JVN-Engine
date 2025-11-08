@@ -3,6 +3,7 @@ package com.jvn.core.menu;
 import com.jvn.core.audio.AudioFacade;
 import com.jvn.core.scene.Scene;
 import com.jvn.core.vn.VnSettings;
+import com.jvn.core.vn.VnSettingsStore;
 
 public class SettingsScene implements Scene {
   private final VnSettings settings;
@@ -91,5 +92,12 @@ public class SettingsScene implements Scene {
       audio.setSfxVolume(settings.getSfxVolume());
       audio.setVoiceVolume(settings.getVoiceVolume());
     }
+  }
+
+  @Override
+  public void onExit() {
+    try {
+      new VnSettingsStore().save(settings);
+    } catch (Exception ignored) {}
   }
 }

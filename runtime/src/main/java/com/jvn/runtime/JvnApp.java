@@ -5,6 +5,7 @@ import com.jvn.core.engine.Engine;
 import com.jvn.core.assets.AssetCatalog;
 import com.jvn.core.assets.AssetType;
 import com.jvn.core.vn.VnSettings;
+import com.jvn.core.vn.VnSettingsStore;
 import com.jvn.core.vn.save.VnSaveManager;
 import com.jvn.core.localization.Localization;
 import com.jvn.core.menu.MainMenuScene;
@@ -110,7 +111,7 @@ public class JvnApp {
     } else if (launchBilliards) {
       log.warn("Billiards module is not available; ignoring --billiards flag.");
     } else {
-      VnSettings settingsModel = new VnSettings();
+      VnSettings settingsModel = new VnSettingsStore().load();
       VnSaveManager saveManager = new VnSaveManager();
       AudioFacade audio = null;
       if ("simp3".equalsIgnoreCase(audioBackend) || "auto".equalsIgnoreCase(audioBackend)) {
@@ -125,6 +126,14 @@ public class JvnApp {
       } else {
         audio = new FxAudioService();
       }
+      // Apply user settings to audio backend immediately
+      try {
+        if (audio != null && settingsModel != null) {
+          audio.setBgmVolume(settingsModel.getBgmVolume());
+          audio.setSfxVolume(settingsModel.getSfxVolume());
+          audio.setVoiceVolume(settingsModel.getVoiceVolume());
+        }
+      } catch (Exception ignored) {}
       MainMenuScene menu = new MainMenuScene(engine, settingsModel, saveManager, scriptName, audio);
       engine.scenes().push(menu);
     }

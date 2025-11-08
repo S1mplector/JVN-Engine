@@ -120,8 +120,54 @@ public class FxAudioService implements AudioFacade {
 
   @Override
   public void crossfadeBgm(String trackId, long ms, boolean loop) {
-    // Fallback: immediate swap to new BGM; no timed crossfade in pure FX backend
-    playBgm(trackId, loop);
+    try {
+      String urlStr = resolveMediaUrl(trackId);
+      if (urlStr == null) { playBgm(trackId, loop); return; }
+      final MediaPlayer oldPlayer = this.bgmPlayer;
+      final MediaPlayer newPlayer = new MediaPlayer(new Media(urlStr));
+      if (loop) newPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+      newPlayer.setVolume(0.0);
+      newPlayer.play();
+
+      long duration = ms <= 0 ? 1000L : ms;
+      final double targetVol = clamp(this.bgmVolume);
+      final int stepMs = 20;
+      final int steps = (int) Math.max(1, duration / stepMs);
+
+      Thread t = new Thread(() -> {
+        try {
+          for (int i = 0; i <= steps; i++) {
+            double p = (double) i / (double) steps;
+            double up = targetVol * p;
+            double down = targetVol * (1.0 - p);
+            try { newPlayer.setVolume(up); } catch (Exception ignored) {}
+            if (oldPlayer != null) {
+              try { oldPlayer.setVolume(down); } catch (Exception ignored) {}
+            }
+            Thread.sleep(stepMs);
+          }
+        } catch (InterruptedException ignored) {
+        } finally {
+          try {
+            if (oldPlayer != null) {
+              try { oldPlayer.stop(); } catch (Exception ignored) {}
+              try { oldPlayer.dispose(); } catch (Exception ignored) {}
+            }
+          } finally {
+            // Set the new player as active and normalize its volume to current bgmVolume
+            try { newPlayer.setVolume(targetVol); } catch (Exception ignored) {}
+            synchronized (FxAudioService.this) {
+              FxAudioService.this.bgmPlayer = newPlayer;
+            }
+          }
+        }
+      }, "fx-bgm-crossfade");
+      t.setDaemon(true);
+      t.start();
+    } catch (Exception ignored) {
+      // Fallback if crossfade setup fails
+      playBgm(trackId, loop);
+    }
   }
 
   private double clamp(float v) {
