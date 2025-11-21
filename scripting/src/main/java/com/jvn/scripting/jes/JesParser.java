@@ -166,10 +166,10 @@ public class JesParser {
           }
         }
       }
-      case "move", "rotate", "scale", "fade", "visible" -> {
+      case "move", "rotate", "scale", "fade", "visible", "walkToTile" -> {
         String target = expect(STRING, "entity name").lexeme;
         a.target = target;
-        expect(LBRACE, "'{'");
+        expect(LBRACE, "'{'" );
         while (!match(RBRACE)) {
           if (match(IDENT)) {
             String k = prev().lexeme;

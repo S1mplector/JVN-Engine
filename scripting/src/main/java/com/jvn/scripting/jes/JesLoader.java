@@ -75,6 +75,14 @@ public class JesLoader {
           scene.add(tilemap);
           if (bool(l.props, "collision", false)) {
             tilemap.buildStaticColliders(scene.getWorld());
+            scene.addCollisionTilemap(tilemap);
+          }
+          String triggerCall = str(l.props, "triggerCall", null);
+          if (triggerCall == null || triggerCall.isBlank()) {
+            triggerCall = str(l.props, "call", null);
+          }
+          if (triggerCall != null && !triggerCall.isBlank()) {
+            scene.addTriggerLayer(tilemap, triggerCall, l.props);
           }
         }
       }
@@ -234,6 +242,9 @@ public class JesLoader {
             ch.setAnimations(CharacterEntity2D.parseAnimations(animSpec));
             String startAnim = str(c, "startAnim", null);
             if (startAnim != null) ch.setCurrentAnimation(startAnim);
+
+            String dialogueId = str(c, "dialogueId", null);
+            if (dialogueId != null && !dialogueId.isBlank()) ch.setDialogueId(dialogueId);
 
             double z = num(c, "z", 0.0);
             ch.setZ(z);

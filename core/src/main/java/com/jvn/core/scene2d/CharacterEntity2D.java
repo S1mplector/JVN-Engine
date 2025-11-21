@@ -18,6 +18,8 @@ public class CharacterEntity2D extends Entity2D {
 
   private double speed = 0.0; // world units per second (not yet used)
 
+  private String dialogueId;
+
   public CharacterEntity2D(SpriteSheet sheet, double drawW, double drawH) {
     this.sheet = sheet;
     this.drawW = drawW;
@@ -35,6 +37,14 @@ public class CharacterEntity2D extends Entity2D {
 
   public double getSpeed() {
     return speed;
+  }
+
+  public void setDialogueId(String id) {
+    this.dialogueId = id;
+  }
+
+  public String getDialogueId() {
+    return dialogueId;
   }
 
   public void setAnimations(Map<String, int[]> anims) {

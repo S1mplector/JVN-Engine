@@ -15,6 +15,7 @@ import com.jvn.core.scene2d.Blitter2D;
 import com.jvn.core.scene2d.CharacterEntity2D;
 import com.jvn.core.scene2d.Entity2D;
 import com.jvn.core.scene2d.Scene2DBase;
+import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
 
 public class JesScene2D extends Scene2DBase {
@@ -34,6 +35,19 @@ public class JesScene2D extends Scene2DBase {
   private String playerName;
   private double gridW = 16.0;
   private double gridH = 16.0;
+  private String playerFacing = "down";
+  private final List<TileMap2D> collisionTilemaps = new ArrayList<>();
+  private static class TriggerLayer {
+    final TileMap2D tilemap;
+    final String call;
+    final Map<String,Object> props;
+    TriggerLayer(TileMap2D tilemap, String call, Map<String,Object> props) {
+      this.tilemap = tilemap;
+      this.call = call;
+      this.props = props;
+    }
+  }
+  private final List<TriggerLayer> triggerLayers = new ArrayList<>();
 
   public static class Binding {
     public final String key;
@@ -52,6 +66,12 @@ public class JesScene2D extends Scene2DBase {
   }
 
   public PhysicsWorld2D getWorld() { return world; }
+  public void addCollisionTilemap(TileMap2D tm) { if (tm != null) collisionTilemaps.add(tm); }
+  public void addTriggerLayer(TileMap2D tm, String call, Map<String,Object> props) {
+    if (tm == null || call == null || call.isBlank()) return;
+    Map<String,Object> copy = (props == null) ? new HashMap<>() : new HashMap<>(props);
+    triggerLayers.add(new TriggerLayer(tm, call, copy));
+  }
   public void setDebug(boolean d) { this.debug = d; }
   public void addBinding(String key, String action, Map<String,Object> props) { bindings.add(new Binding(key, action, props)); }
   public void registerEntity(String name, Entity2D e) { if (name != null && !name.isBlank() && e != null && !named.containsKey(name)) named.put(name, e); }
@@ -137,6 +157,36 @@ public class JesScene2D extends Scene2DBase {
         if (!st.started) { 
           st.started = true; 
           st.sx = e.getX(); 
+          st.sy = e.getY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        tlElapsedMs += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
+        double ep = Easing.apply(st.easing, p);
+        e.setPosition(st.sx + (tx - st.sx) * ep, st.sy + (ty - st.sy) * ep);
+        if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
+      }
+      case "walkToTile" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) { tlIndex++; tlElapsedMs = 0; return; }
+        if (gridW == 0 || gridH == 0) { tlIndex++; tlElapsedMs = 0; return; }
+        double txTile = toNum(a.props.get("tx"), Double.NaN);
+        double tyTile = toNum(a.props.get("ty"), Double.NaN);
+        double tx;
+        double ty;
+        if (Double.isNaN(txTile) || Double.isNaN(tyTile)) {
+          tx = toNum(a.props.get("x"), e.getX());
+          ty = toNum(a.props.get("y"), e.getY());
+        } else {
+          tx = txTile * gridW;
+          ty = tyTile * gridH;
+        }
+        double dur = toNum(a.props.get("dur"), 0);
+        ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
+        if (!st.started) {
+          st.started = true;
+          st.sx = e.getX();
           st.sy = e.getY();
           String easingStr = toStr(a.props.get("easing"), "LINEAR");
           try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
@@ -299,6 +349,7 @@ public class JesScene2D extends Scene2DBase {
       case "spawnCircle" -> { spawnCircle(b.props); yield true; }
       case "spawnBox" -> { spawnBox(b.props); yield true; }
       case "moveHero" -> { moveHero(b.props); yield true; }
+      case "interact" -> { interact(); yield true; }
       default -> false;
     };
     if (!handled && actionHandler != null) {
@@ -328,6 +379,41 @@ public class JesScene2D extends Scene2DBase {
     PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
     add(vis);
   }
+  
+  private boolean isBlockedWorld(double x, double y) {
+    if (collisionTilemaps.isEmpty() || gridW == 0 || gridH == 0) return false;
+    int tx = (int) Math.floor(x / gridW);
+    int ty = (int) Math.floor(y / gridH);
+    return isBlockedTile(tx, ty);
+  }
+
+  private boolean isBlockedTile(int tx, int ty) {
+    if (collisionTilemaps.isEmpty()) return false;
+    for (TileMap2D tm : collisionTilemaps) {
+      if (tx < 0 || ty < 0 || tx >= tm.getCols() || ty >= tm.getRows()) {
+        return true;
+      }
+      if (tm.getTile(tx, ty) >= 0) return true;
+    }
+    return false;
+  }
+
+  private void checkTriggersAt(double x, double y) {
+    if (triggerLayers.isEmpty() || gridW == 0 || gridH == 0) return;
+    int tx = (int) Math.floor(x / gridW);
+    int ty = (int) Math.floor(y / gridH);
+    for (TriggerLayer tl : triggerLayers) {
+      TileMap2D tm = tl.tilemap;
+      if (tm == null) continue;
+      int tile = tm.getTile(tx, ty);
+      if (tile < 0) continue;
+      Map<String,Object> props = new HashMap<>(tl.props);
+      props.put("tileX", (double) tx);
+      props.put("tileY", (double) ty);
+      props.put("tile", (double) tile);
+      invokeCall(tl.call, props);
+    }
+  }
 
   private void moveHero(Map<String,Object> props) {
     if (playerName == null || playerName.isBlank()) return;
@@ -345,7 +431,12 @@ public class JesScene2D extends Scene2DBase {
       default -> {}
     }
     if (dx == 0 && dy == 0) return;
-    e.setPosition(e.getX() + dx, e.getY() + dy);
+    if (!dLower.isEmpty()) playerFacing = dLower;
+    double nx = e.getX() + dx;
+    double ny = e.getY() + dy;
+    if (isBlockedWorld(nx, ny)) return;
+    e.setPosition(nx, ny);
+    checkTriggersAt(nx, ny);
     if (e instanceof CharacterEntity2D ch) {
       String animName = switch (dLower) {
         case "up" -> "up";
@@ -355,6 +446,49 @@ public class JesScene2D extends Scene2DBase {
         default -> null;
       };
       if (animName != null) ch.setCurrentAnimation(animName);
+    }
+  }
+
+  private void interact() {
+    if (playerName == null || playerName.isBlank()) return;
+    if (gridW == 0 || gridH == 0) return;
+    Entity2D hero = named.get(playerName);
+    if (hero == null) return;
+    int heroTx = (int) Math.floor(hero.getX() / gridW);
+    int heroTy = (int) Math.floor(hero.getY() / gridH);
+    int tx = heroTx;
+    int ty = heroTy;
+    String d = playerFacing == null ? "down" : playerFacing;
+    switch (d) {
+      case "up" -> ty--;
+      case "down" -> ty++;
+      case "left" -> tx--;
+      case "right" -> tx++;
+      default -> {}
+    }
+    String npcName = null;
+    CharacterEntity2D npcEntity = null;
+    for (Map.Entry<String, Entity2D> entry : named.entrySet()) {
+      String name = entry.getKey();
+      if (name == null || name.equals(playerName)) continue;
+      Entity2D ent = entry.getValue();
+      if (!(ent instanceof CharacterEntity2D)) continue;
+      int ex = (int) Math.floor(ent.getX() / gridW);
+      int ey = (int) Math.floor(ent.getY() / gridH);
+      if (ex == tx && ey == ty) {
+        npcName = name;
+        npcEntity = (CharacterEntity2D) ent;
+        break;
+      }
+    }
+    if (npcName != null) {
+      Map<String,Object> props = new HashMap<>();
+      props.put("npc", npcName);
+      if (npcEntity != null) {
+        String did = npcEntity.getDialogueId();
+        if (did != null && !did.isBlank()) props.put("dialogueId", did);
+      }
+      invokeCall("interactNpc", props);
     }
   }
 
