@@ -1,12 +1,19 @@
 package com.jvn.scripting.jes;
 
-import com.jvn.scripting.jes.ast.JesAst;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Supplier;
 
-import static com.jvn.scripting.jes.JesTokenType.*;
+import static com.jvn.scripting.jes.JesTokenType.COLON;
+import static com.jvn.scripting.jes.JesTokenType.COMMA;
+import static com.jvn.scripting.jes.JesTokenType.EOF;
+import static com.jvn.scripting.jes.JesTokenType.IDENT;
+import static com.jvn.scripting.jes.JesTokenType.LBRACE;
+import static com.jvn.scripting.jes.JesTokenType.LPAREN;
+import static com.jvn.scripting.jes.JesTokenType.NUMBER;
+import static com.jvn.scripting.jes.JesTokenType.RBRACE;
+import static com.jvn.scripting.jes.JesTokenType.RPAREN;
+import static com.jvn.scripting.jes.JesTokenType.STRING;
+import com.jvn.scripting.jes.ast.JesAst;
 
 public class JesParser {
   private final List<JesToken> toks;
@@ -83,11 +90,32 @@ public class JesParser {
       case "call" -> {
         String name = expect(STRING, "function name").lexeme;
         a.target = name;
+        if (match(LBRACE)) {
+          while (!match(RBRACE)) {
+            if (match(IDENT)) {
+              String k = prev().lexeme;
+              expect(COLON, ":");
+              Object v = parseValue();
+              a.props.put(k, v);
+            } else { i++; }
+          }
+        }
       }
-      case "move", "rotate", "scale" -> {
+      case "move", "rotate", "scale", "fade", "visible" -> {
         String target = expect(STRING, "entity name").lexeme;
         a.target = target;
         expect(LBRACE, "'{'");
+        while (!match(RBRACE)) {
+          if (match(IDENT)) {
+            String k = prev().lexeme;
+            expect(COLON, ":");
+            Object v = parseValue();
+            a.props.put(k, v);
+          } else { i++; }
+        }
+      }
+      case "cameraMove", "cameraZoom", "cameraShake" -> {
+        expect(LBRACE, "'{'" );
         while (!match(RBRACE)) {
           if (match(IDENT)) {
             String k = prev().lexeme;

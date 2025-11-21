@@ -1,20 +1,20 @@
 package com.jvn.scripting.jes.runtime;
 
-import com.jvn.core.physics.PhysicsWorld2D;
-import com.jvn.core.physics.RigidBody2D;
-import com.jvn.core.scene2d.Blitter2D;
-import com.jvn.core.scene2d.Scene2DBase;
-import com.jvn.core.input.Input;
-import com.jvn.core.scene2d.Entity2D;
-import com.jvn.scripting.jes.ast.JesAst;
-import com.jvn.core.animation.Easing;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+
+import com.jvn.core.animation.Easing;
+import com.jvn.core.input.Input;
+import com.jvn.core.physics.PhysicsWorld2D;
+import com.jvn.core.physics.RigidBody2D;
+import com.jvn.core.scene2d.Blitter2D;
+import com.jvn.core.scene2d.Entity2D;
+import com.jvn.core.scene2d.Scene2DBase;
+import com.jvn.scripting.jes.ast.JesAst;
 
 public class JesScene2D extends Scene2DBase {
   private final PhysicsWorld2D world = new PhysicsWorld2D();
@@ -42,6 +42,8 @@ public class JesScene2D extends Scene2DBase {
     boolean started;
     double sx, sy, sRot, ssx, ssy;
     Easing.Type easing = Easing.Type.LINEAR;
+    double sAlpha;
+    double sZoom;
   }
 
   public PhysicsWorld2D getWorld() { return world; }
@@ -176,6 +178,110 @@ public class JesScene2D extends Scene2DBase {
         e.setScale(st.ssx + (tsx - st.ssx) * ep, st.ssy + (tsy - st.ssy) * ep);
         if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
       }
+      case "fade" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) { tlIndex++; tlElapsedMs = 0; return; }
+        double targetAlpha = toNum(a.props.get("alpha"), getAlpha(e));
+        double dur = toNum(a.props.get("dur"), 0);
+        ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
+        if (!st.started) {
+          st.started = true;
+          st.sAlpha = getAlpha(e);
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        tlElapsedMs += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
+        double ep = Easing.apply(st.easing, p);
+        double aVal = st.sAlpha + (targetAlpha - st.sAlpha) * ep;
+        setAlpha(e, aVal);
+        if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
+      }
+      case "visible" -> {
+        Entity2D e = named.get(a.target);
+        if (e != null) {
+          boolean vis = toBool(a.props.get("value"), true);
+          e.setVisible(vis);
+        }
+        tlIndex++;
+        tlElapsedMs = 0;
+      }
+      case "cameraMove" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) { tlIndex++; tlElapsedMs = 0; return; }
+        double tx = toNum(a.props.get("x"), cam.getX());
+        double ty = toNum(a.props.get("y"), cam.getY());
+        double dur = toNum(a.props.get("dur"), 0);
+        ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
+        if (!st.started) {
+          st.started = true;
+          st.sx = cam.getX();
+          st.sy = cam.getY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        tlElapsedMs += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
+        double ep = Easing.apply(st.easing, p);
+        double nx = st.sx + (tx - st.sx) * ep;
+        double ny = st.sy + (ty - st.sy) * ep;
+        cam.setPosition(nx, ny);
+        if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
+      }
+      case "cameraZoom" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) { tlIndex++; tlElapsedMs = 0; return; }
+        double tz = toNum(a.props.get("zoom"), cam.getZoom());
+        double dur = toNum(a.props.get("dur"), 0);
+        ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
+        if (!st.started) {
+          st.started = true;
+          st.sZoom = cam.getZoom();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        tlElapsedMs += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
+        double ep = Easing.apply(st.easing, p);
+        double nz = st.sZoom + (tz - st.sZoom) * ep;
+        cam.setZoom(nz);
+        if (p >= 1.0) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); }
+      }
+      case "cameraShake" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) { tlIndex++; tlElapsedMs = 0; return; }
+        double ampX = toNum(a.props.get("ampX"), 16);
+        double ampY = toNum(a.props.get("ampY"), 16);
+        double dur = toNum(a.props.get("dur"), 300);
+        ActionRuntime st = actionState.computeIfAbsent(tlIndex, k -> new ActionRuntime());
+        if (!st.started) {
+          st.started = true;
+          st.sx = cam.getX();
+          st.sy = cam.getY();
+        }
+        tlElapsedMs += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, tlElapsedMs / dur);
+        double intensity = 1.0 - p;
+        double ox = (Math.random() * 2.0 - 1.0) * ampX * intensity;
+        double oy = (Math.random() * 2.0 - 1.0) * ampY * intensity;
+        cam.setPosition(st.sx + ox, st.sy + oy);
+        if (p >= 1.0) {
+          cam.setPosition(st.sx, st.sy);
+          tlIndex++;
+          tlElapsedMs = 0;
+          actionState.remove(tlIndex-1);
+        }
+      }
+      case "spawnCircle" -> {
+        spawnCircle(a.props == null ? java.util.Collections.emptyMap() : a.props);
+        tlIndex++;
+        tlElapsedMs = 0;
+      }
+      case "spawnBox" -> {
+        spawnBox(a.props == null ? java.util.Collections.emptyMap() : a.props);
+        tlIndex++;
+        tlElapsedMs = 0;
+      }
       default -> { tlIndex++; tlElapsedMs = 0; }
     }
   }
@@ -236,5 +342,23 @@ public class JesScene2D extends Scene2DBase {
   
   private static String toStr(Object o, String def) {
     return o instanceof String s ? s : def;
+  }
+
+  private static boolean toBool(Object o, boolean def) {
+    return o instanceof Boolean b ? b : def;
+  }
+
+  private static double getAlpha(Entity2D e) {
+    if (e instanceof com.jvn.core.scene2d.Sprite2D s) return s.getAlpha();
+    if (e instanceof com.jvn.core.scene2d.Label2D l) return l.getAlpha();
+    if (e instanceof com.jvn.core.scene2d.Panel2D p) return p.getFillA();
+    return 1.0;
+  }
+
+  private static void setAlpha(Entity2D e, double a) {
+    double aa = Math.max(0.0, Math.min(1.0, a));
+    if (e instanceof com.jvn.core.scene2d.Sprite2D s) s.setAlpha(aa);
+    else if (e instanceof com.jvn.core.scene2d.Label2D l) l.setColor(l.getColorR(), l.getColorG(), l.getColorB(), aa);
+    else if (e instanceof com.jvn.core.scene2d.Panel2D p) p.setFill(p.getFillR(), p.getFillG(), p.getFillB(), aa);
   }
 }
