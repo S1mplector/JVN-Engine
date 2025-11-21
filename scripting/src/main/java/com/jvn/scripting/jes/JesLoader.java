@@ -1,16 +1,24 @@
 package com.jvn.scripting.jes;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.jvn.core.physics.RigidBody2D;
+import com.jvn.core.scene2d.CharacterEntity2D;
 import com.jvn.core.scene2d.Label2D;
 import com.jvn.core.scene2d.Panel2D;
-import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.core.scene2d.ParticleEmitter2D;
+import com.jvn.core.scene2d.Sprite2D;
+import com.jvn.core.scene2d.SpriteSheet;
+import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
-
-import java.io.InputStream;
-import java.util.List;
 
 public class JesLoader {
   public static JesScene2D load(InputStream in) throws Exception {
@@ -30,6 +38,48 @@ public class JesLoader {
 
   private static JesScene2D buildScene(JesAst.SceneDecl s) {
     JesScene2D scene = new JesScene2D();
+
+    // Build tileset lookup
+    Map<String, JesAst.TilesetDecl> tilesets = new HashMap<>();
+    for (JesAst.TilesetDecl t : s.tilesets) {
+      if (t != null && t.name != null) tilesets.put(t.name, t);
+    }
+
+    // Build tilemap layers from the first map, if any, and expose tile size
+    final double[] mapTileW = new double[]{1.0};
+    final double[] mapTileH = new double[]{1.0};
+    final boolean[] hasMapInfo = new boolean[]{false};
+    if (!s.maps.isEmpty() && !tilesets.isEmpty()) {
+      JesAst.MapDecl m = s.maps.get(0);
+      String tilesetName = str(m.props, "tileset", null);
+      JesAst.TilesetDecl ts = tilesets.get(tilesetName);
+      if (ts != null) {
+        String image = str(ts.props, "image", null);
+        int tileW = (int) num(ts.props, "tileW", 16);
+        int tileH = (int) num(ts.props, "tileH", 16);
+        int cols = (int) num(ts.props, "cols", 8);
+        SpriteSheet sheet = new SpriteSheet(image, tileW, tileH, cols);
+
+        int mapCols = (int) num(m.props, "width", 10);
+        int mapRows = (int) num(m.props, "height", 10);
+        double drawTileW = num(m.props, "tileW", tileW);
+        double drawTileH = num(m.props, "tileH", tileH);
+        mapTileW[0] = drawTileW;
+        mapTileH[0] = drawTileH;
+        hasMapInfo[0] = true;
+
+        for (JesAst.MapLayerDecl l : m.layers) {
+          TileMap2D tilemap = new TileMap2D(sheet, mapCols, mapRows, drawTileW, drawTileH);
+          String dataPath = str(l.props, "data", null);
+          loadLayerIntoTilemap(tilemap, dataPath);
+          scene.add(tilemap);
+          if (bool(l.props, "collision", false)) {
+            tilemap.buildStaticColliders(scene.getWorld());
+          }
+        }
+      }
+    }
+
     for (JesAst.InputBinding b : s.bindings) {
       scene.addBinding(b.key, b.action, b.props);
     }
@@ -152,6 +202,44 @@ public class JesLoader {
             scene.add(vis);
             scene.registerEntity(e.name, vis);
           }
+          case "Character2D" -> {
+            String image = str(c, "spriteSheet", null);
+            int frameW = (int) num(c, "frameW", 16);
+            int frameH = (int) num(c, "frameH", 16);
+            int cols = (int) num(c, "cols", 8);
+            double drawW = num(c, "drawW", frameW);
+            double drawH = num(c, "drawH", frameH);
+            SpriteSheet sheet = new SpriteSheet(image, frameW, frameH, cols);
+            CharacterEntity2D ch = new CharacterEntity2D(sheet, drawW, drawH);
+
+            double x = num(c, "x", 0);
+            double y = num(c, "y", 0);
+            if (hasMapInfo[0] && (has(c, "startTileX") || has(c, "startTileY"))) {
+              int tx = (int) num(c, "startTileX", 0);
+              int ty = (int) num(c, "startTileY", 0);
+              x = tx * mapTileW[0];
+              y = ty * mapTileH[0];
+            }
+            ch.setPosition(x, y);
+
+            double speed = num(c, "speed", 80.0);
+            ch.setSpeed(speed);
+
+            double ox = num(c, "originX", 0.5);
+            double oy = num(c, "originY", 1.0);
+            ch.setOrigin(ox, oy);
+
+            String animSpec = str(c, "animations", null);
+            ch.setAnimations(CharacterEntity2D.parseAnimations(animSpec));
+            String startAnim = str(c, "startAnim", null);
+            if (startAnim != null) ch.setCurrentAnimation(startAnim);
+
+            double z = num(c, "z", 0.0);
+            ch.setZ(z);
+
+            scene.add(ch);
+            scene.registerEntity(e.name, ch);
+          }
           default -> {}
         }
       });
@@ -172,4 +260,44 @@ public class JesLoader {
     return v instanceof Boolean b ? b : def;
   }
   private static boolean has(JesAst.ComponentDecl c, String key) { return c.props.containsKey(key); }
+
+  private static double num(Map<String,Object> props, String key, double def) {
+    Object v = props.get(key);
+    return v instanceof Number n ? n.doubleValue() : def;
+  }
+
+  private static String str(Map<String,Object> props, String key, String def) {
+    Object v = props.get(key);
+    return v instanceof String s ? s : def;
+  }
+
+  private static boolean bool(Map<String,Object> props, String key, boolean def) {
+    Object v = props.get(key);
+    return v instanceof Boolean b ? b : def;
+  }
+
+  private static void loadLayerIntoTilemap(TileMap2D tm, String path) {
+    if (tm == null || path == null || path.isBlank()) return;
+    try (InputStream in = JesLoader.class.getClassLoader().getResourceAsStream(path)) {
+      if (in == null) return;
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+        String line;
+        int y = 0;
+        int rows = tm.getRows();
+        int cols = tm.getCols();
+        while ((line = br.readLine()) != null && y < rows) {
+          String[] parts = line.split(",");
+          for (int x = 0; x < parts.length && x < cols; x++) {
+            String sVal = parts[x].trim();
+            if (sVal.isEmpty()) continue;
+            try {
+              int idx = Integer.parseInt(sVal);
+              tm.setTile(x, y, idx);
+            } catch (NumberFormatException ignored) {}
+          }
+          y++;
+        }
+      }
+    } catch (Exception ignored) {}
+  }
 }

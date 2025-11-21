@@ -1,6 +1,9 @@
 package com.jvn.scripting.jes.ast;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class JesAst {
   public static class Program {
@@ -12,6 +15,8 @@ public class JesAst {
     public final List<EntityDecl> entities = new ArrayList<>();
     public final List<InputBinding> bindings = new ArrayList<>();
     public final List<TimelineAction> timeline = new ArrayList<>();
+    public final List<TilesetDecl> tilesets = new ArrayList<>();
+    public final List<MapDecl> maps = new ArrayList<>();
   }
   public static class EntityDecl {
     public String name;
@@ -29,6 +34,19 @@ public class JesAst {
   public static class TimelineAction {
     public String type; // wait, move, rotate, scale, call
     public String target; // optional entity name
+    public final Map<String,Object> props = new HashMap<>();
+  }
+  public static class TilesetDecl {
+    public String name;
+    public final Map<String,Object> props = new HashMap<>();
+  }
+  public static class MapDecl {
+    public String name;
+    public final Map<String,Object> props = new HashMap<>();
+    public final List<MapLayerDecl> layers = new ArrayList<>();
+  }
+  public static class MapLayerDecl {
+    public String name;
     public final Map<String,Object> props = new HashMap<>();
   }
 }

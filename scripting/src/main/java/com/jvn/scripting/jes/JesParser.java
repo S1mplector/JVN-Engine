@@ -47,7 +47,13 @@ public class JesParser {
     while (!match(RBRACE)) {
       if (peek().type == IDENT) {
         String word = peek().lexeme;
-        if ("entity".equals(word)) {
+        if ("tileset".equals(word)) {
+          match(IDENT); // consume 'tileset'
+          s.tilesets.add(parseTileset());
+        } else if ("map".equals(word)) {
+          match(IDENT); // consume 'map'
+          s.maps.add(parseMap());
+        } else if ("entity".equals(word)) {
           match(IDENT); // consume 'entity'
           s.entities.add(parseEntity());
         } else if ("on".equals(word)) {
@@ -77,6 +83,65 @@ public class JesParser {
       }
     }
     return s;
+  }
+
+  private JesAst.TilesetDecl parseTileset() {
+    JesAst.TilesetDecl t = new JesAst.TilesetDecl();
+    t.name = expect(STRING, "tileset name").lexeme;
+    expect(LBRACE, "'{'");
+    while (!match(RBRACE)) {
+      if (match(IDENT)) {
+        String key = prev().lexeme;
+        expect(COLON, ":");
+        Object val = parseValue();
+        t.props.put(key, val);
+      } else {
+        i++;
+      }
+    }
+    return t;
+  }
+
+  private JesAst.MapDecl parseMap() {
+    JesAst.MapDecl m = new JesAst.MapDecl();
+    m.name = expect(STRING, "map name").lexeme;
+    expect(LBRACE, "'{'");
+    while (!match(RBRACE)) {
+      if (peek().type == IDENT) {
+        String word = peek().lexeme;
+        if ("layer".equals(word)) {
+          match(IDENT); // consume 'layer'
+          m.layers.add(parseMapLayer());
+        } else if (match(IDENT)) {
+          String key = prev().lexeme;
+          expect(COLON, ":");
+          Object val = parseValue();
+          m.props.put(key, val);
+        } else {
+          i++;
+        }
+      } else {
+        i++;
+      }
+    }
+    return m;
+  }
+
+  private JesAst.MapLayerDecl parseMapLayer() {
+    JesAst.MapLayerDecl l = new JesAst.MapLayerDecl();
+    l.name = expect(STRING, "layer name").lexeme;
+    expect(LBRACE, "'{'");
+    while (!match(RBRACE)) {
+      if (match(IDENT)) {
+        String key = prev().lexeme;
+        expect(COLON, ":");
+        Object val = parseValue();
+        l.props.put(key, val);
+      } else {
+        i++;
+      }
+    }
+    return l;
   }
 
   private JesAst.TimelineAction parseTimelineAction(String kind) {
