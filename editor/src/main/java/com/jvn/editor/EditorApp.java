@@ -28,16 +28,22 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.geometry.Pos;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -49,6 +55,7 @@ public class EditorApp extends Application {
   // UI
   private AnimationTimer timer;
   private Label status;
+  private Label fps;
   private File lastOpened;
   private Entity2D selected;
   private InspectorView inspectorView;
@@ -375,13 +382,15 @@ public class EditorApp extends Application {
     mb.getMenus().addAll(menuFile, menuEdit, menuCode, menuView, menuProject, menuSamples);
 
     // Toolbar
-    HBox toolbar = new HBox(8);
+    BorderPane toolbar = new BorderPane();
     toolbar.getStyleClass().add("master-toolbar");
     Button btnOpen = new Button("Open"); btnOpen.setOnAction(e -> doOpen(primaryStage));
+    Button btnOpenProject = new Button("Open Project"); btnOpenProject.setOnAction(e -> doOpenProject(primaryStage));
     Button btnReload = new Button("Reload"); btnReload.setOnAction(e -> doReload());
     Button btnApply = new Button("Apply Code"); btnApply.setOnAction(e -> applyCodeFromEditor());
     Button btnFit = new Button("Fit"); btnFit.setOnAction(e -> fitCameraToContent());
     Button btnReset = new Button("Reset"); btnReset.setOnAction(e -> resetCamera());
+    Button btnRun = new Button("Run"); btnRun.setOnAction(e -> doRunProject(primaryStage));
     // Icons to the right of text
     btnOpen.setGraphic(icon("icon", "icon-open"));
     btnOpen.setContentDisplay(ContentDisplay.RIGHT);
@@ -400,6 +409,7 @@ public class EditorApp extends Application {
     btnReset.setGraphicTextGap(6);
     btnApply.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) applyCodeFromEditor(); });
     status = new Label("Ready");
+    fps = new Label("");
     Button btnSave = new Button("Save");
     Button btnUndo = new Button("Undo");
     Button btnRedo = new Button("Redo");
@@ -409,15 +419,25 @@ public class EditorApp extends Application {
     Button btnPlay = new Button("Play");
     Button btnStop = new Button("Stop");
     Button btnSettings = new Button("Settings");
-    btnSave.setOnAction(e -> status.setText("Saved"));
-    btnUndo.setOnAction(e -> status.setText("Undo"));
-    btnRedo.setOnAction(e -> status.setText("Redo"));
+    btnSave.setOnAction(e -> doSave(primaryStage));
+    btnUndo.setOnAction(e -> { commands.undo(); status.setText("Undo"); inspectorView.setSelection(selected); });
+    btnRedo.setOnAction(e -> { commands.redo(); status.setText("Redo"); inspectorView.setSelection(selected); });
     btnZoomIn.setOnAction(e -> status.setText("Zoom In"));
     btnZoomOut.setOnAction(e -> status.setText("Zoom Out"));
     btnZoomReset.setOnAction(e -> status.setText("Zoom 100%"));
-    btnPlay.setOnAction(e -> status.setText("Play"));
+    btnPlay.setOnAction(e -> doRunProject(primaryStage));
     btnStop.setOnAction(e -> status.setText("Stop"));
     btnSettings.setOnAction(e -> status.setText("Settings"));
+    btnOpen.setTooltip(new Tooltip("Open JES (Cmd+O)"));
+    btnOpenProject.setTooltip(new Tooltip("Open Project"));
+    btnReload.setTooltip(new Tooltip("Reload (Cmd+R)"));
+    btnApply.setTooltip(new Tooltip("Apply Code (Cmd+Enter)"));
+    btnFit.setTooltip(new Tooltip("Fit to Content (Cmd+F)"));
+    btnReset.setTooltip(new Tooltip("Reset Camera (Cmd+0)"));
+    btnRun.setTooltip(new Tooltip("Run Project"));
+    btnSave.setTooltip(new Tooltip("Save (Cmd+S)"));
+    btnUndo.setTooltip(new Tooltip("Undo (Cmd+Z)"));
+    btnRedo.setTooltip(new Tooltip("Redo (Shift+Cmd+Z)"));
     // Icons for second-row controls
     btnSave.setGraphic(icon("icon", "icon-save"));
     btnSave.setContentDisplay(ContentDisplay.RIGHT);
@@ -457,7 +477,7 @@ public class EditorApp extends Application {
       }
       if (found != null) {
         logo.setImage(found);
-        logo.setFitHeight(128);
+        logo.setFitHeight(80);
         logo.setPreserveRatio(true);
         logo.setSmooth(true);
         // Subtle light glow so it remains visible on black background
@@ -473,17 +493,25 @@ public class EditorApp extends Application {
     }
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
-    // Two fixed rows: first row core actions, second row Save/Undo/Redo
     HBox row1 = new HBox(8);
     HBox row2 = new HBox(8);
-    row1.getChildren().addAll(btnOpen, btnReload, btnApply, btnFit, btnReset);
-    row2.getChildren().addAll(btnSave, btnUndo, btnRedo, status);
+    row1.getChildren().addAll(btnOpen, btnOpenProject, btnReload, btnApply, btnFit, btnReset, btnRun);
+    row2.getChildren().addAll(btnSave, btnUndo, btnRedo, spacer, fps, status);
     VBox toolRows = new VBox(6);
     toolRows.getChildren().addAll(row1, row2);
     HBox.setHgrow(toolRows, Priority.ALWAYS);
-    toolbar.getChildren().clear();
-    if (logo.isManaged()) toolbar.getChildren().addAll(toolRows, spacer, logo);
-    else toolbar.getChildren().addAll(toolRows, spacer);
+    String ver = System.getProperty("jvn.version");
+    if (ver == null || ver.isBlank()) {
+      Package pkg = EditorApp.class.getPackage();
+      ver = (pkg != null && pkg.getImplementationVersion() != null) ? pkg.getImplementationVersion() : "dev";
+    }
+    Label verLabel = new Label("JVN Engine v" + ver);
+    VBox logoBox = new VBox(2);
+    logoBox.setAlignment(Pos.CENTER);
+    logoBox.getChildren().addAll(logo, verLabel);
+    toolbar.setLeft(toolRows);
+    BorderPane.setAlignment(logoBox, Pos.TOP_RIGHT);
+    toolbar.setRight(logoBox);
 
     // Layout
     BorderPane top = new BorderPane();
@@ -513,7 +541,6 @@ public class EditorApp extends Application {
     Tab tabMenuTheme = new Tab("Menu Theme", menuThemeEditor); tabMenuTheme.setClosable(false);
     rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline, tabSettings, tabMenuTheme);
     rightTabs.setPrefWidth(360);
-    root.setRight(rightTabs);
     timelineView.setOnRunArc(a -> {
       if (a == null || a.script == null) return;
       File f = resolveProjectFile(a.script);
@@ -557,7 +584,12 @@ public class EditorApp extends Application {
     tabScene = new Tab("Scene", sgView); tabScene.setClosable(false);
     sideTabs.getTabs().addAll(tabProject, tabScene);
     sideTabs.setPrefWidth(260);
-    root.setLeft(sideTabs);
+    SplitPane centerSplit = new SplitPane();
+    centerSplit.getItems().addAll(sideTabs, filesTabs, rightTabs);
+    centerSplit.setDividerPositions(0.22, 0.78);
+    root.setLeft(null);
+    root.setRight(null);
+    root.setCenter(centerSplit);
 
     Scene scene = new Scene(root, 1200, 800);
     // Load editor stylesheet (icons, theme, etc.)
@@ -567,6 +599,22 @@ public class EditorApp extends Application {
     } catch (Exception ignore) {}
     primaryStage.setScene(scene);
     primaryStage.show();
+    scene.setOnDragOver((DragEvent e) -> {
+      Dragboard db = e.getDragboard();
+      if (db != null && db.hasFiles()) e.acceptTransferModes(TransferMode.COPY);
+      e.consume();
+    });
+    scene.setOnDragDropped((DragEvent e) -> {
+      Dragboard db = e.getDragboard();
+      boolean success = false;
+      if (db != null && db.hasFiles()) {
+        File file = db.getFiles().get(0);
+        if (file != null) openFile(file);
+        success = true;
+      }
+      e.setDropCompleted(success);
+      e.consume();
+    });
 
     // Timer
     timer = new AnimationTimer() {
@@ -579,6 +627,10 @@ public class EditorApp extends Application {
         if (ft != null) {
           ft.setSize(filesTabs.getWidth(), filesTabs.getHeight());
           ft.render(dt);
+        }
+        if (fps != null) {
+          double f = (dt > 0) ? (1000.0 / dt) : 0.0;
+          fps.setText(String.format("%.0f fps", f));
         }
       }
     };

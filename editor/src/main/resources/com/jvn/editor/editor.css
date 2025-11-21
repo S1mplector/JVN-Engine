@@ -68,6 +68,7 @@
 
 /* Root and common containers */
 .root, .border-pane, .pane, .vbox, .hbox { -fx-background-color: #121212; }
+.root { -fx-accent: #808080; -fx-focus-color: #808080; -fx-faint-focus-color: rgba(128,128,128,0.25); -fx-selection-bar: #3a3a3a; -fx-selection-bar-non-focused: #2f2f2f; }
 .scroll-pane { -fx-background: #121212; -fx-background-color: #121212; }
 .scroll-pane > .viewport { -fx-background-color: #121212; }
 .split-pane { -fx-background-color: #121212; }
@@ -76,6 +77,12 @@
 /* Menu bar */
 .menu-bar { -fx-background-color: #000000; }
 .menu-bar .label { -fx-text-fill: #e6e6e6; }
+.menu-bar .menu-button:hover,
+.menu-bar .menu-button:focused,
+.menu-bar .menu-button:showing {
+  -fx-background-color: #2a2a2a;
+  -fx-background-radius: 6;
+}
 .context-menu { -fx-background-color: #1a1a1a; }
 .menu-item:focused { -fx-background-color: #2a2a2a; }
 .menu-item .label { -fx-text-fill: #e6e6e6; }
@@ -145,6 +152,24 @@
 
 /* Reset (counterclockwise arrow) */
 .icon-reset { -fx-shape: "M8,2 A6,6 0 1,1 2,8 L4,8 L1,11 L1,7 L2,7 A6,6 0 1,0 8,2 Z"; -fx-background-color: #9aa0a6; }
+
+/* Save (floppy) */
+.icon-save {
+  -fx-shape: "M2,2 L12,2 L14,4 L14,14 L2,14 Z M5,3 L9,3 L9,6 L5,6 Z M4,9 L12,9 L12,13 L4,13 Z";
+  -fx-background-color: #9aa0a6;
+}
+
+/* Undo (left arrow) */
+.icon-undo {
+  -fx-shape: "M7,4 L3,8 L7,12 L7,9 L13,9 L13,7 L7,7 Z";
+  -fx-background-color: #9aa0a6;
+}
+
+/* Redo (right arrow) */
+.icon-redo {
+  -fx-shape: "M9,4 L13,8 L9,12 L9,9 L3,9 L3,7 L9,7 Z";
+  -fx-background-color: #9aa0a6;
+}
 
 /* Neutralize old trapezoid logo style; now using image */
 .jvn-logo { -fx-background-color: transparent; -fx-shape: null; }
