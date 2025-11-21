@@ -12,6 +12,7 @@ import com.jvn.core.input.Input;
 import com.jvn.core.physics.PhysicsWorld2D;
 import com.jvn.core.physics.RigidBody2D;
 import com.jvn.core.scene2d.Blitter2D;
+import com.jvn.core.scene2d.CharacterEntity2D;
 import com.jvn.core.scene2d.Entity2D;
 import com.jvn.core.scene2d.Scene2DBase;
 import com.jvn.scripting.jes.ast.JesAst;
@@ -29,6 +30,10 @@ public class JesScene2D extends Scene2DBase {
   private double tlElapsedMs = 0;
   private final Map<Integer, ActionRuntime> actionState = new HashMap<>();
   private BiConsumer<String, Map<String,Object>> actionHandler;
+
+  private String playerName;
+  private double gridW = 16.0;
+  private double gridH = 16.0;
 
   public static class Binding {
     public final String key;
@@ -67,6 +72,8 @@ public class JesScene2D extends Scene2DBase {
       try { actionHandler.accept(name, props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
     }
   }
+  public void setPlayerName(String name) { this.playerName = name; }
+  public void setGridSize(double w, double h) { this.gridW = w; this.gridH = h; }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
@@ -291,6 +298,7 @@ public class JesScene2D extends Scene2DBase {
       case "toggleDebug" -> { toggleDebugOverlay(); yield true; }
       case "spawnCircle" -> { spawnCircle(b.props); yield true; }
       case "spawnBox" -> { spawnBox(b.props); yield true; }
+      case "moveHero" -> { moveHero(b.props); yield true; }
       default -> false;
     };
     if (!handled && actionHandler != null) {
@@ -319,6 +327,35 @@ public class JesScene2D extends Scene2DBase {
     world.addBody(body);
     PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
     add(vis);
+  }
+
+  private void moveHero(Map<String,Object> props) {
+    if (playerName == null || playerName.isBlank()) return;
+    Entity2D e = named.get(playerName);
+    if (e == null) return;
+    String dir = toStr(props.get("dir"), "down");
+    double dx = 0;
+    double dy = 0;
+    String dLower = dir == null ? "" : dir.toLowerCase();
+    switch (dLower) {
+      case "up" -> dy = -gridH;
+      case "down" -> dy = gridH;
+      case "left" -> dx = -gridW;
+      case "right" -> dx = gridW;
+      default -> {}
+    }
+    if (dx == 0 && dy == 0) return;
+    e.setPosition(e.getX() + dx, e.getY() + dy);
+    if (e instanceof CharacterEntity2D ch) {
+      String animName = switch (dLower) {
+        case "up" -> "up";
+        case "down" -> "down";
+        case "left" -> "left";
+        case "right" -> "right";
+        default -> null;
+      };
+      if (animName != null) ch.setCurrentAnimation(animName);
+    }
   }
 
   private void spawnBox(Map<String,Object> props) {

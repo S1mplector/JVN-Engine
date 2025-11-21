@@ -79,6 +79,7 @@ public class JesLoader {
         }
       }
     }
+    scene.setGridSize(mapTileW[0], mapTileH[0]);
 
     for (JesAst.InputBinding b : s.bindings) {
       scene.addBinding(b.key, b.action, b.props);
@@ -239,6 +240,8 @@ public class JesLoader {
 
             scene.add(ch);
             scene.registerEntity(e.name, ch);
+            boolean controllable = bool(c, "controllable", false);
+            if (controllable) scene.setPlayerName(e.name);
           }
           default -> {}
         }
