@@ -18,6 +18,7 @@ import com.jvn.scripting.jes.runtime.JesScene2D;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -34,19 +35,18 @@ import javafx.scene.control.TabPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
-import javafx.scene.input.DragEvent;
-import javafx.scene.input.Dragboard;
-import javafx.scene.input.TransferMode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
-import javafx.geometry.Pos;
-import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -58,6 +58,7 @@ public class EditorApp extends Application {
   private Label fps;
   private File lastOpened;
   private Entity2D selected;
+  private String lastSelectedName;
   private InspectorView inspectorView;
   private TabPane filesTabs;
   private boolean showGrid = true;
@@ -145,6 +146,7 @@ public class EditorApp extends Application {
       if (timelineView != null) timelineView.setProjectRoot(root);
       if (settingsEditor != null) settingsEditor.setProjectRoot(root);
       if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(root);
+      selectProjectTab();
     }
     return root;
   }
@@ -664,6 +666,7 @@ public class EditorApp extends Application {
     if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(dir);
     applyProjectRootToTabs();
     status.setText("Project: " + dir.getName());
+    selectProjectTab();
   }
 
   private void openJesFile(File f) { openFile(f); }
@@ -691,6 +694,16 @@ public class EditorApp extends Application {
       ft.apply();
       status.setText("Applied");
       updateContextForActiveTab();
+      if (lastSelectedName != null && !lastSelectedName.isBlank()) {
+        JesScene2D scene = ft.getJesScene();
+        if (scene != null) {
+          Entity2D ent = scene.find(lastSelectedName);
+          if (ent != null) {
+            selected = ent;
+            if (inspectorView != null) inspectorView.setSelection(ent);
+          }
+        }
+      }
     } catch (Exception ex) {
       status.setText("Apply failed");
       Alert a = new Alert(Alert.AlertType.ERROR, "Failed to apply code: " + ex.getMessage());
@@ -756,7 +769,19 @@ public class EditorApp extends Application {
     // Create new tab
     FileEditorTab editor = new FileEditorTab(f);
     if (projectRoot != null) editor.setProjectRoot(projectRoot);
-    editor.setOnSelected(ent -> { selected = ent; inspectorView.setSelection(ent); });
+    editor.setOnSelected(ent -> {
+      selected = ent;
+      if (inspectorView != null) inspectorView.setSelection(ent);
+      FileEditorTab ft = getActiveFileTab();
+      if (ft != null) {
+        JesScene2D scene = ft.getJesScene();
+        if (scene != null && ent != null) {
+          for (var e : scene.exportNamed().entrySet()) {
+            if (e.getValue() == ent) { lastSelectedName = e.getKey(); break; }
+          }
+        }
+      }
+    });
     editor.setOnStatus(s -> status.setText(s));
     editor.setCommandStack(commands);
     Tab tab = new Tab(f.getName(), editor);
@@ -768,6 +793,9 @@ public class EditorApp extends Application {
     lastOpened = f;
     status.setText("Loaded: " + f.getName());
     updateContextForActiveTab();
+    if (editor.getKind() == FileEditorTab.Kind.JES) {
+      selectSceneTab();
+    }
   }
 
   private void applyProjectRootToTabs() {
@@ -817,5 +845,17 @@ public class EditorApp extends Application {
   private void fitCameraToContent() {
     FileEditorTab ft = getActiveFileTab();
     if (ft != null) ft.fitToContent();
+  }
+
+  private void selectProjectTab() {
+    if (tabProject != null && tabProject.getTabPane() != null) {
+      tabProject.getTabPane().getSelectionModel().select(tabProject);
+    }
+  }
+
+  private void selectSceneTab() {
+    if (tabScene != null && tabScene.getTabPane() != null) {
+      tabScene.getTabPane().getSelectionModel().select(tabScene);
+    }
   }
 }
