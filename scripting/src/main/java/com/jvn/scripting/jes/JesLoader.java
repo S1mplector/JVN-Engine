@@ -17,6 +17,7 @@ import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.core.scene2d.SpriteSheet;
 import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
+import com.jvn.scripting.jes.runtime.Equipment;
 import com.jvn.scripting.jes.runtime.Inventory;
 import com.jvn.scripting.jes.runtime.Item;
 import com.jvn.scripting.jes.runtime.JesScene2D;
@@ -307,13 +308,36 @@ public class JesLoader {
             if (itemsStr != null) {
               String[] parts = itemsStr.split(",");
               for (String part : parts) {
-                String id = part.trim();
-                if (!id.isEmpty()) {
-                  inv.add(id, 1);
+                String token = part.trim();
+                if (token.isEmpty()) continue;
+                String id = token;
+                int count = 1;
+                int star = token.indexOf('*');
+                if (star >= 0) {
+                  id = token.substring(0, star).trim();
+                  String cntStr = token.substring(star + 1).trim();
+                  try { count = Integer.parseInt(cntStr); } catch (NumberFormatException ignored) {}
+                  if (count <= 0) count = 1;
                 }
+                if (id.isEmpty()) continue;
+                Item def = items.get(id);
+                int maxStack = def == null ? 0 : (int) num(def.getProps(), "maxStack", 0);
+                inv.addBounded(id, count, maxStack);
               }
             }
             scene.setInventory(e.name, inv);
+          }
+          case "Equipment" -> {
+            Equipment eq = new Equipment();
+            for (Map.Entry<String,Object> entry : c.props.entrySet()) {
+              String slot = entry.getKey();
+              Object v = entry.getValue();
+              if (!(v instanceof String id)) continue;
+              if (slot == null || slot.isBlank()) continue;
+              if (id == null || id.isBlank()) continue;
+              eq.set(slot, id);
+            }
+            scene.setEquipment(e.name, eq);
           }
           default -> {}
         }

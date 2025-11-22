@@ -10,6 +10,9 @@ public class Stats {
   private double speed;
   private String deathCall;
   private boolean removeOnDeath;
+  private double atkBonus;
+  private double defBonus;
+  private double speedBonus;
 
   public double getMaxHp() { return maxHp; }
 
@@ -47,17 +50,29 @@ public class Stats {
     }
   }
 
-  public double getAtk() { return atk; }
+  public double getAtk() { return atk + atkBonus; }
 
   public void setAtk(double atk) { this.atk = atk; }
 
-  public double getDef() { return def; }
+  public double getAtkBonus() { return atkBonus; }
+
+  public void setAtkBonus(double atkBonus) { this.atkBonus = atkBonus; }
+
+  public double getDef() { return def + defBonus; }
 
   public void setDef(double def) { this.def = def; }
 
-  public double getSpeed() { return speed; }
+  public double getDefBonus() { return defBonus; }
+
+  public void setDefBonus(double defBonus) { this.defBonus = defBonus; }
+
+  public double getSpeed() { return speed + speedBonus; }
 
   public void setSpeed(double speed) { this.speed = speed; }
+
+  public double getSpeedBonus() { return speedBonus; }
+
+  public void setSpeedBonus(double speedBonus) { this.speedBonus = speedBonus; }
 
   public String getDeathCall() { return deathCall; }
 

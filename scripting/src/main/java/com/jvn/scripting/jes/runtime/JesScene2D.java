@@ -27,6 +27,7 @@ public class JesScene2D extends Scene2DBase {
   private final Map<String, Stats> statsByEntity = new HashMap<>();
   private final Map<String, Item> items = new HashMap<>();
   private final Map<String, Inventory> inventories = new HashMap<>();
+  private final Map<String, Equipment> equipmentByEntity = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
@@ -112,6 +113,34 @@ public class JesScene2D extends Scene2DBase {
     inv.add(itemId, count);
     return true;
   }
+  public boolean giveItem(String name, String itemId, int count) {
+    if (name == null || name.isBlank()) return false;
+    if (itemId == null || itemId.isBlank()) return false;
+    if (count <= 0) return false;
+    Item item = items.get(itemId);
+    if (item == null) return false;
+    Inventory inv = inventories.get(name);
+    if (inv == null) {
+      inv = new Inventory();
+      inventories.put(name, inv);
+    }
+    int maxStack = getMaxStackForItem(item);
+    return inv.addBounded(itemId, count, maxStack);
+  }
+  public boolean takeItem(String name, String itemId, int count) {
+    if (name == null || name.isBlank()) return false;
+    if (itemId == null || itemId.isBlank()) return false;
+    if (count <= 0) return false;
+    Inventory inv = inventories.get(name);
+    if (inv == null) return false;
+    return inv.remove(itemId, count);
+  }
+  public Equipment getEquipment(String name) { return name == null ? null : equipmentByEntity.get(name); }
+  public void setEquipment(String name, Equipment eq) {
+    if (name == null || name.isBlank() || eq == null) return;
+    equipmentByEntity.put(name, eq);
+    recomputeEquipmentBonuses(name);
+  }
   public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public void invokeCall(String name, Map<String,Object> props) {
@@ -122,6 +151,14 @@ public class JesScene2D extends Scene2DBase {
       warpMap(actualProps);
     } else if ("useItem".equals(name)) {
       useItem(actualProps);
+    } else if ("giveItem".equals(name)) {
+      handleGiveItem(actualProps);
+    } else if ("takeItem".equals(name)) {
+      handleTakeItem(actualProps);
+    } else if ("equipItem".equals(name)) {
+      handleEquipItem(actualProps);
+    } else if ("unequipItem".equals(name)) {
+      handleUnequipItem(actualProps);
     }
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
@@ -437,8 +474,10 @@ public class JesScene2D extends Scene2DBase {
   private void useItem(Map<String,Object> props) {
     String user = toStr(props.get("user"), null);
     String itemId = toStr(props.get("itemId"), null);
+    String target = toStr(props.get("target"), user);
     if (user == null || user.isBlank()) return;
     if (itemId == null || itemId.isBlank()) return;
+    if (target == null || target.isBlank()) target = user;
 
     Inventory inv = inventories.get(user);
     if (inv == null) return;
@@ -451,10 +490,10 @@ public class JesScene2D extends Scene2DBase {
 
     double hpRestore = toNum(ip.get("hpRestore"), 0);
     if (hpRestore > 0) {
-      heal(user, hpRestore, itemId);
+      heal(target, hpRestore, itemId);
     }
 
-    Stats stats = statsByEntity.get(user);
+    Stats stats = statsByEntity.get(target);
     if (stats != null) {
       double mpRestore = toNum(ip.get("mpRestore"), 0);
       if (mpRestore > 0) {
@@ -470,9 +509,124 @@ public class JesScene2D extends Scene2DBase {
     if (onUseCallObj instanceof String onUseCall && !onUseCall.isBlank()) {
       Map<String,Object> callProps = new HashMap<>();
       callProps.put("user", user);
+      callProps.put("target", target);
       callProps.put("itemId", itemId);
       invokeCall(onUseCall, callProps);
     }
+  }
+
+  private void handleEquipItem(Map<String,Object> props) {
+    String user = toStr(props.get("user"), null);
+    String slot = toStr(props.get("slot"), null);
+    String itemId = toStr(props.get("itemId"), null);
+    if (user == null || user.isBlank()) return;
+    if (slot == null || slot.isBlank()) return;
+    if (itemId == null || itemId.isBlank()) return;
+
+    Item item = items.get(itemId);
+    if (item == null) return;
+    Object typeObj = item.getProps().get("type");
+    if (typeObj instanceof String t && !"equipment".equalsIgnoreCase(t)) return;
+    Object slotObj = item.getProps().get("equipSlot");
+    if (slotObj instanceof String s && !s.isBlank()) {
+      if (!s.equalsIgnoreCase(slot)) return;
+    }
+
+    Inventory inv = inventories.get(user);
+    if (inv == null || !inv.remove(itemId, 1)) return;
+
+    Equipment eq = equipmentByEntity.get(user);
+    if (eq == null) {
+      eq = new Equipment();
+      equipmentByEntity.put(user, eq);
+    }
+
+    String previous = eq.get(slot);
+    eq.set(slot, itemId);
+    recomputeEquipmentBonuses(user);
+
+    if (previous != null && !previous.isBlank()) {
+      Item prevItem = items.get(previous);
+      int maxStackPrev = getMaxStackForItem(prevItem);
+      Inventory inv2 = inventories.get(user);
+      if (inv2 == null) {
+        inv2 = new Inventory();
+        inventories.put(user, inv2);
+      }
+      inv2.addBounded(previous, 1, maxStackPrev);
+    }
+  }
+
+  private void handleUnequipItem(Map<String,Object> props) {
+    String user = toStr(props.get("user"), null);
+    String slot = toStr(props.get("slot"), null);
+    if (user == null || user.isBlank()) return;
+    if (slot == null || slot.isBlank()) return;
+    Equipment eq = equipmentByEntity.get(user);
+    if (eq == null) return;
+    String current = eq.get(slot);
+    if (current == null || current.isBlank()) return;
+    eq.set(slot, null);
+    recomputeEquipmentBonuses(user);
+
+    Item item = items.get(current);
+    int maxStack = getMaxStackForItem(item);
+    Inventory inv = inventories.get(user);
+    if (inv == null) {
+      inv = new Inventory();
+      inventories.put(user, inv);
+    }
+    inv.addBounded(current, 1, maxStack);
+  }
+
+  private void recomputeEquipmentBonuses(String name) {
+    if (name == null || name.isBlank()) return;
+    Stats stats = statsByEntity.get(name);
+    if (stats == null) return;
+    Equipment eq = equipmentByEntity.get(name);
+    stats.setAtkBonus(0.0);
+    stats.setDefBonus(0.0);
+    stats.setSpeedBonus(0.0);
+    if (eq == null) return;
+    for (String slot : eq.getSlots().keySet()) {
+      String itemId = eq.get(slot);
+      if (itemId == null || itemId.isBlank()) continue;
+      Item item = items.get(itemId);
+      if (item == null) continue;
+      Map<String,Object> ip = item.getProps();
+      double atkBonus = toNum(ip.get("atkBonus"), 0);
+      double defBonus = toNum(ip.get("defBonus"), 0);
+      double speedBonus = toNum(ip.get("speedBonus"), 0);
+      if (atkBonus != 0) stats.setAtkBonus(stats.getAtkBonus() + atkBonus);
+      if (defBonus != 0) stats.setDefBonus(stats.getDefBonus() + defBonus);
+      if (speedBonus != 0) stats.setSpeedBonus(stats.getSpeedBonus() + speedBonus);
+    }
+  }
+
+  private void handleGiveItem(Map<String,Object> props) {
+    String target = toStr(props.get("target"), null);
+    String itemId = toStr(props.get("itemId"), null);
+    int count = (int) toNum(props.get("count"), 1);
+    if (count <= 0) count = 1;
+    giveItem(target, itemId, count);
+  }
+
+  private void handleTakeItem(Map<String,Object> props) {
+    String target = toStr(props.get("target"), null);
+    String itemId = toStr(props.get("itemId"), null);
+    int count = (int) toNum(props.get("count"), 1);
+    if (count <= 0) count = 1;
+    takeItem(target, itemId, count);
+  }
+
+  private int getMaxStackForItem(Item item) {
+    if (item == null) return 0;
+    Object v = item.getProps().get("maxStack");
+    if (v instanceof Number n) {
+      int m = (int) n.doubleValue();
+      return m <= 0 ? 0 : m;
+    }
+    return 0;
   }
   
   private boolean isBlockedWorld(double x, double y) {
