@@ -14,6 +14,7 @@ import com.jvn.editor.ui.ProjectExplorerView;
 import com.jvn.editor.ui.SceneGraphView;
 import com.jvn.editor.ui.SettingsEditorView;
 import com.jvn.editor.ui.StoryTimelineView;
+import com.jvn.editor.ui.TilemapEditorView;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 
 import javafx.animation.AnimationTimer;
@@ -68,6 +69,7 @@ public class EditorApp extends Application {
   private StoryTimelineView timelineView;
   private SettingsEditorView settingsEditor;
   private com.jvn.editor.ui.MenuThemeEditorView menuThemeEditor;
+  private TilemapEditorView mapEditorView;
   private final CommandStack commands = new CommandStack();
   private Tab tabProject;
   private Tab tabScene;
@@ -146,6 +148,7 @@ public class EditorApp extends Application {
       if (timelineView != null) timelineView.setProjectRoot(root);
       if (settingsEditor != null) settingsEditor.setProjectRoot(root);
       if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(root);
+      if (mapEditorView != null) mapEditorView.setProjectRoot(root);
       selectProjectTab();
     }
     return root;
@@ -298,6 +301,7 @@ public class EditorApp extends Application {
       if (timelineView != null) { timelineView.setProjectRoot(dir); timelineView.setTimelineFile(new File(dir, "story.timeline")); }
       if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
       if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(dir);
+      if (mapEditorView != null) mapEditorView.setProjectRoot(dir);
       status.setText("Created project: " + name);
     } catch (Exception ex) {
       status.setText("Create project failed");
@@ -536,12 +540,14 @@ public class EditorApp extends Application {
     timelineView = new StoryTimelineView();
     settingsEditor = new SettingsEditorView();
     menuThemeEditor = new com.jvn.editor.ui.MenuThemeEditorView();
+    mapEditorView = new TilemapEditorView();
     TabPane rightTabs = new TabPane();
     Tab tabInspectorRight = new Tab("Inspector", inspectorScroll); tabInspectorRight.setClosable(false);
+    Tab tabMapEditor = new Tab("Map Editor", mapEditorView); tabMapEditor.setClosable(false);
     Tab tabTimeline = new Tab("Timeline", timelineView); tabTimeline.setClosable(false);
     Tab tabSettings = new Tab("Settings", settingsEditor); tabSettings.setClosable(false);
     Tab tabMenuTheme = new Tab("Menu Theme", menuThemeEditor); tabMenuTheme.setClosable(false);
-    rightTabs.getTabs().addAll(tabInspectorRight, tabTimeline, tabSettings, tabMenuTheme);
+    rightTabs.getTabs().addAll(tabInspectorRight, tabMapEditor, tabTimeline, tabSettings, tabMenuTheme);
     rightTabs.setPrefWidth(360);
     timelineView.setOnRunArc(a -> {
       if (a == null || a.script == null) return;
@@ -664,6 +670,7 @@ public class EditorApp extends Application {
     if (timelineView != null) { timelineView.setProjectRoot(dir); String tf = loadManifest(dir) != null ? loadManifest(dir).getProperty("timeline", "story.timeline") : "story.timeline"; timelineView.setTimelineFile(new File(dir, tf)); }
     if (settingsEditor != null) settingsEditor.setProjectRoot(dir);
     if (menuThemeEditor != null) menuThemeEditor.setProjectRoot(dir);
+    if (mapEditorView != null) mapEditorView.setProjectRoot(dir);
     applyProjectRootToTabs();
     status.setText("Project: " + dir.getName());
     selectProjectTab();
@@ -805,6 +812,7 @@ public class EditorApp extends Application {
         fet.setProjectRoot(projectRoot);
       }
     }
+    if (mapEditorView != null) mapEditorView.setProjectRoot(projectRoot);
   }
 
   private FileEditorTab getActiveFileTab() {
@@ -815,16 +823,24 @@ public class EditorApp extends Application {
 
   private void updateContextForActiveTab() {
     FileEditorTab ft = getActiveFileTab();
-    if (sgView == null || inspectorView == null) return;
     JesScene2D scene = (ft != null) ? ft.getJesScene() : null;
-    inspectorView.setScene(scene);
-    sgView.setContext(
-      scene,
-      ent -> { selected = ent; inspectorView.setSelection(ent); },
-      this::fitCameraToEntity,
-      s -> status.setText(s)
-    );
-    sgView.refresh();
+    if (inspectorView != null) inspectorView.setScene(scene);
+    if (sgView != null && inspectorView != null) {
+      sgView.setContext(
+        scene,
+        ent -> { selected = ent; inspectorView.setSelection(ent); },
+        this::fitCameraToEntity,
+        s -> status.setText(s)
+      );
+      sgView.refresh();
+    }
+    if (mapEditorView != null) {
+      if (ft != null && ft.getKind() == FileEditorTab.Kind.JES && ft.getFile() != null && projectRoot != null) {
+        mapEditorView.setContext(projectRoot, ft.getFile());
+      } else {
+        mapEditorView.clearContext();
+      }
+    }
   }
 
   private void fitCameraToEntity(Entity2D e) {

@@ -23,20 +23,27 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
 public class TilemapEditorView extends BorderPane {
   private File projectRoot;
   private File jesFile;
 
+  private ComboBox<String> mapBox;
   private ComboBox<String> layerBox;
   private Spinner<Integer> indexSpinner;
   private Label statusLabel;
   private Canvas canvas;
   private ScrollPane scroll;
+  private Canvas tilesetCanvas;
+  private ScrollPane tilesetScroll;
 
+  private JesAst.SceneDecl currentScene;
+  private List<JesAst.MapDecl> maps = new ArrayList<>();
   private JesAst.MapDecl currentMap;
   private List<JesAst.MapLayerDecl> layers = new ArrayList<>();
   private JesAst.MapLayerDecl currentLayer;
@@ -47,7 +54,21 @@ public class TilemapEditorView extends BorderPane {
   private int selectedIndex = 0;
   private double cellSize = 24.0;
 
+  private JesAst.TilesetDecl currentTileset;
+  private Image tilesetImage;
+  private int tilesetCols;
+  private int tilesetTileW;
+  private int tilesetTileH;
+  private double tilesetScale = 2.0;
+
   public TilemapEditorView() {
+    mapBox = new ComboBox<>();
+    mapBox.setPrefWidth(160);
+    mapBox.setPromptText("Map");
+    mapBox.setOnAction(e -> {
+      selectMap(mapBox.getSelectionModel().getSelectedIndex());
+    });
+
     layerBox = new ComboBox<>();
     layerBox.setPrefWidth(160);
     layerBox.setPromptText("Layer");
@@ -69,7 +90,11 @@ public class TilemapEditorView extends BorderPane {
 
     statusLabel = new Label("No JES context");
 
-    HBox tools = new HBox(8, new Label("Layer:"), layerBox, new Label("Tile:"), indexSpinner, reloadButton, saveButton, statusLabel);
+    HBox tools = new HBox(8,
+      new Label("Map:"), mapBox,
+      new Label("Layer:"), layerBox,
+      new Label("Tile:"), indexSpinner,
+      reloadButton, saveButton, statusLabel);
     tools.setPadding(new Insets(4));
 
     canvas = new Canvas(400, 300);
@@ -81,11 +106,20 @@ public class TilemapEditorView extends BorderPane {
     scroll.setFitToWidth(true);
     scroll.setFitToHeight(true);
 
+    tilesetCanvas = new Canvas(256, 128);
+    tilesetCanvas.setOnMousePressed(e -> handleTilesetClick(e.getX(), e.getY()));
+    Tooltip.install(tilesetCanvas, new Tooltip("Click a tile in the tileset to select index"));
+    tilesetScroll = new ScrollPane(tilesetCanvas);
+    tilesetScroll.setFitToWidth(true);
+    tilesetScroll.setFitToHeight(false);
+
     ToolBar tb = new ToolBar();
     tb.getItems().add(tools);
 
     setTop(tb);
-    setCenter(scroll);
+    VBox centerBox = new VBox(4, tilesetScroll, scroll);
+    centerBox.setPadding(new Insets(4));
+    setCenter(centerBox);
   }
 
   public void setProjectRoot(File root) {
@@ -100,11 +134,18 @@ public class TilemapEditorView extends BorderPane {
 
   public void clearContext() {
     this.jesFile = null;
+    this.currentScene = null;
+    this.maps.clear();
     this.currentMap = null;
     this.layers.clear();
     this.currentLayer = null;
     this.tiles = null;
+    if (mapBox != null) mapBox.getItems().clear();
+    if (layerBox != null) layerBox.getItems().clear();
+    currentTileset = null;
+    tilesetImage = null;
     redraw();
+    redrawTileset();
     if (statusLabel != null) statusLabel.setText("No JES context");
   }
 
@@ -123,14 +164,59 @@ public class TilemapEditorView extends BorderPane {
         return;
       }
       JesAst.SceneDecl scene = prog.scenes.get(0);
+      currentScene = scene;
       if (scene.maps.isEmpty()) {
         clearContext();
         statusLabel.setText("Scene has no maps");
         return;
       }
-      currentMap = scene.maps.get(0);
+      maps = new ArrayList<>();
+      List<String> mapNames = new ArrayList<>();
+      for (JesAst.MapDecl m : scene.maps) {
+        if (m == null) continue;
+        maps.add(m);
+        mapNames.add(m.name == null ? "map" : m.name);
+      }
+      mapBox.getItems().setAll(mapNames);
+      if (!maps.isEmpty()) {
+        mapBox.getSelectionModel().select(0);
+        selectMap(0);
+      } else {
+        currentMap = null;
+        layers = new ArrayList<>();
+        layerBox.getItems().clear();
+        currentLayer = null;
+        tiles = null;
+        redraw();
+        updateTilesetForCurrentMap();
+        statusLabel.setText("Scene has no maps");
+      }
+    } catch (Exception ex) {
+      clearContext();
+      statusLabel.setText("Parse error");
+    }
+  }
+
+  private void selectMap(int index) {
+    if (maps == null || index < 0 || index >= maps.size()) {
+      currentMap = null;
       layers = new ArrayList<>();
-      List<String> names = new ArrayList<>();
+      layerBox.getItems().clear();
+      currentLayer = null;
+      tiles = null;
+      redraw();
+      updateTilesetForCurrentMap();
+      return;
+    }
+    currentMap = maps.get(index);
+    rebuildLayersForCurrentMap();
+    updateTilesetForCurrentMap();
+  }
+
+  private void rebuildLayersForCurrentMap() {
+    layers = new ArrayList<>();
+    List<String> names = new ArrayList<>();
+    if (currentMap != null) {
       for (JesAst.MapLayerDecl l : currentMap.layers) {
         if (l == null) continue;
         Object d = l.props.get("data");
@@ -139,19 +225,16 @@ public class TilemapEditorView extends BorderPane {
           names.add(l.name == null ? "layer" : l.name);
         }
       }
-      layerBox.getItems().setAll(names);
-      if (!layers.isEmpty()) {
-        layerBox.getSelectionModel().select(0);
-        selectLayer(0);
-      } else {
-        currentLayer = null;
-        tiles = null;
-        redraw();
-        statusLabel.setText("Map has no data layers");
-      }
-    } catch (Exception ex) {
-      clearContext();
-      statusLabel.setText("Parse error");
+    }
+    layerBox.getItems().setAll(names);
+    if (!layers.isEmpty()) {
+      layerBox.getSelectionModel().select(0);
+      selectLayer(0);
+    } else {
+      currentLayer = null;
+      tiles = null;
+      redraw();
+      statusLabel.setText("Map has no data layers");
     }
   }
 
@@ -231,6 +314,66 @@ public class TilemapEditorView extends BorderPane {
     return def;
   }
 
+  private double getTilesetProp(JesAst.TilesetDecl t, String key, double def) {
+    if (t == null || t.props == null) return def;
+    Object v = t.props.get(key);
+    if (v instanceof Number n) return n.doubleValue();
+    return def;
+  }
+
+  private void updateTilesetForCurrentMap() {
+    currentTileset = null;
+    tilesetImage = null;
+    tilesetCols = 0;
+    tilesetTileW = 0;
+    tilesetTileH = 0;
+    if (currentScene == null || currentMap == null || projectRoot == null) {
+      redrawTileset();
+      return;
+    }
+    Object tsObj = currentMap.props.get("tileset");
+    if (!(tsObj instanceof String tsName) || tsName.isBlank()) {
+      redrawTileset();
+      return;
+    }
+    for (JesAst.TilesetDecl t : currentScene.tilesets) {
+      if (t != null && tsName.equals(t.name)) {
+        currentTileset = t;
+        break;
+      }
+    }
+    if (currentTileset == null) {
+      redrawTileset();
+      return;
+    }
+    Object imgObj = currentTileset.props.get("image");
+    if (!(imgObj instanceof String imgPath) || imgPath.isBlank()) {
+      redrawTileset();
+      return;
+    }
+    File imgFile = new File(projectRoot, imgPath);
+    if (!imgFile.exists()) {
+      redrawTileset();
+      return;
+    }
+    try {
+      tilesetImage = new Image(imgFile.toURI().toString());
+    } catch (Exception ex) {
+      tilesetImage = null;
+    }
+    tilesetTileW = (int) getTilesetProp(currentTileset, "tileW", 16);
+    tilesetTileH = (int) getTilesetProp(currentTileset, "tileH", 16);
+    if (tilesetImage != null && tilesetTileW > 0) {
+      int colsFromImage = (int) (tilesetImage.getWidth() / tilesetTileW);
+      double defCols = colsFromImage > 0 ? colsFromImage : 1;
+      tilesetCols = (int) getTilesetProp(currentTileset, "cols", defCols);
+      if (tilesetCols <= 0) tilesetCols = colsFromImage > 0 ? colsFromImage : 1;
+    } else {
+      tilesetCols = (int) getTilesetProp(currentTileset, "cols", 8);
+    }
+    redrawTileset();
+  }
+
   private void saveLayer() {
     if (currentLayer == null || tiles == null) return;
     if (projectRoot == null) return;
@@ -256,6 +399,27 @@ public class TilemapEditorView extends BorderPane {
     } catch (Exception ex) {
       statusLabel.setText("Save failed");
     }
+  }
+
+  private void handleTilesetClick(double px, double py) {
+    if (tilesetImage == null || tilesetTileW <= 0 || tilesetTileH <= 0 || tilesetCols <= 0) return;
+    double stepX = tilesetTileW * tilesetScale;
+    double stepY = tilesetTileH * tilesetScale;
+    if (stepX <= 0 || stepY <= 0) return;
+    int tx = (int) (px / stepX);
+    int ty = (int) (py / stepY);
+    if (tx < 0 || ty < 0) return;
+    int maxCols = (int) (tilesetImage.getWidth() / tilesetTileW);
+    int maxRows = (int) (tilesetImage.getHeight() / tilesetTileH);
+    if (tx >= maxCols || ty >= maxRows) return;
+    int idx = ty * tilesetCols + tx;
+    selectedIndex = idx;
+    if (indexSpinner != null && indexSpinner.getValueFactory() instanceof SpinnerValueFactory.IntegerSpinnerValueFactory vf) {
+      if (idx > vf.getMax()) vf.setMax(idx);
+      vf.setValue(idx);
+    }
+    redraw();
+    redrawTileset();
   }
 
   private void handlePaint(double px, double py) {
@@ -298,6 +462,42 @@ public class TilemapEditorView extends BorderPane {
         g.setStroke(Color.color(0.2, 0.2, 0.25));
         g.strokeRect(sx, sy, cellSize, cellSize);
       }
+    }
+  }
+
+  private void redrawTileset() {
+    GraphicsContext g = tilesetCanvas.getGraphicsContext2D();
+    if (tilesetImage == null || tilesetTileW <= 0 || tilesetTileH <= 0) {
+      tilesetCanvas.setWidth(300);
+      tilesetCanvas.setHeight(80);
+      g.setFill(Color.color(0.1, 0.1, 0.12));
+      g.fillRect(0, 0, tilesetCanvas.getWidth(), tilesetCanvas.getHeight());
+      g.setFill(Color.color(0.8, 0.8, 0.8));
+      g.fillText("No tileset", 16, 24);
+      return;
+    }
+    double srcW = tilesetImage.getWidth();
+    double srcH = tilesetImage.getHeight();
+    double cw = srcW * tilesetScale;
+    double ch = srcH * tilesetScale;
+    tilesetCanvas.setWidth(cw);
+    tilesetCanvas.setHeight(ch);
+    g.setFill(Color.color(0.06, 0.06, 0.08));
+    g.fillRect(0, 0, cw, ch);
+    g.drawImage(tilesetImage, 0, 0, cw, ch);
+    double stepX = tilesetTileW * tilesetScale;
+    double stepY = tilesetTileH * tilesetScale;
+    g.setStroke(Color.color(1, 1, 1, 0.25));
+    for (double x = 0; x <= cw; x += stepX) g.strokeLine(x, 0, x, ch);
+    for (double y = 0; y <= ch; y += stepY) g.strokeLine(0, y, cw, y);
+    if (selectedIndex >= 0 && tilesetCols > 0) {
+      int sx = selectedIndex % tilesetCols;
+      int sy = selectedIndex / tilesetCols;
+      double hx = sx * stepX;
+      double hy = sy * stepY;
+      g.setStroke(Color.color(1.0, 1.0, 0.2, 0.9));
+      g.setLineWidth(2.0);
+      g.strokeRect(hx + 1, hy + 1, stepX - 2, stepY - 2);
     }
   }
 }
