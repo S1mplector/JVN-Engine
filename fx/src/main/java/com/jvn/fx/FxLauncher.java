@@ -14,6 +14,7 @@ import com.jvn.core.scene2d.Scene2D;
 import com.jvn.fx.scene2d.FxBlitter2D;
 import com.jvn.core.scene2d.Scene2DBase;
 import com.jvn.core.graphics.Camera2D;
+import com.jvn.core.graphics.ViewportScaler2D;
 import com.jvn.core.demo.Example2DScene;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -300,11 +301,19 @@ public class FxLauncher extends Application {
             vnRenderer.render(vnScene.getState(), vnScene.getScenario(), w, h, mouseX, mouseY);
           } else if (currentScene instanceof Scene2D scene2D) {
             blitter2D.setViewport(w, h);
+            blitter2D.clear(0, 0, 0, 1); // cover full window, bars included
             if (currentScene instanceof Scene2DBase s2db) {
               if (engine != null) s2db.setInput(engine.input());
               if (s2db.getCamera() == null) s2db.setCamera(new Camera2D());
             }
-            scene2D.render(blitter2D, w, h);
+            double targetW = (engine != null && engine.getConfig() != null) ? engine.getConfig().width() : w;
+            double targetH = (engine != null && engine.getConfig() != null) ? engine.getConfig().height() : h;
+            var vp = ViewportScaler2D.fit(targetW, targetH, w, h);
+            blitter2D.push();
+            blitter2D.translate(vp.offsetX(), vp.offsetY());
+            blitter2D.scale(vp.scale(), vp.scale());
+            scene2D.render(blitter2D, vp.targetWidth(), vp.targetHeight());
+            blitter2D.pop();
           } else if (currentScene instanceof MainMenuScene main) {
             menuRenderer.renderMainMenu(main, w, h);
           } else if (currentScene instanceof LoadMenuScene load) {

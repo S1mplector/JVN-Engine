@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
+import java.lang.management.ManagementFactory;
 import java.util.Properties;
 
 import com.jvn.core.scene2d.Entity2D;
@@ -48,15 +49,27 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import com.sun.management.OperatingSystemMXBean;
 
 public class EditorApp extends Application {
   // UI
   private AnimationTimer timer;
   private Label status;
   private Label fps;
+  private TextFlow perf;
+  private Text cpuText;
+  private Text gpuText;
+  private Text ramText;
+  private Text fpsText;
+  private PerfGraph perfGraph;
   private File lastOpened;
   private Entity2D selected;
   private String lastSelectedName;
@@ -74,6 +87,14 @@ public class EditorApp extends Application {
   private Tab tabProject;
   private Tab tabScene;
   private File projectRoot;
+  private OperatingSystemMXBean osBean;
+  private long lastPerfUpdateNs = -1L;
+  private double lastFps = 0.0;
+  private static final Color CPU_COLOR = Color.web("#f27333");
+  private static final Color GPU_COLOR = Color.web("#a855f7");
+  private static final Color RAM_COLOR = Color.web("#49a5ff");
+  private static final Color GRID_BG = Color.color(0.08, 0.08, 0.08, 0.8);
+  private static final Color GRID_LINE = Color.color(1, 1, 1, 0.08);
 
   public static void main(String[] args) {
     launch(args);
@@ -388,6 +409,7 @@ public class EditorApp extends Application {
     mb.getMenus().addAll(menuFile, menuEdit, menuCode, menuView, menuProject, menuSamples);
 
     // Toolbar
+    osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
     BorderPane toolbar = new BorderPane();
     toolbar.getStyleClass().add("master-toolbar");
     Button btnOpen = new Button("Open"); btnOpen.setOnAction(e -> doOpen(primaryStage));
@@ -416,6 +438,17 @@ public class EditorApp extends Application {
     btnApply.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) applyCodeFromEditor(); });
     status = new Label("Ready");
     fps = new Label("");
+    cpuText = new Text("CPU --");
+    cpuText.setFill(CPU_COLOR);
+    gpuText = new Text(" | GPU n/a");
+    gpuText.setFill(GPU_COLOR);
+    ramText = new Text(" | RAM --");
+    ramText.setFill(RAM_COLOR);
+    fpsText = new Text(" | FPS --");
+    fpsText.setFill(Color.WHITE);
+    perf = new TextFlow(cpuText, gpuText, ramText, fpsText);
+    perf.setLineSpacing(2);
+    perfGraph = new PerfGraph();
     Button btnSave = new Button("Save");
     Button btnUndo = new Button("Undo");
     Button btnRedo = new Button("Redo");
@@ -516,6 +549,14 @@ public class EditorApp extends Application {
     logoBox.setAlignment(Pos.CENTER);
     logoBox.getChildren().addAll(logo, verLabel);
     toolbar.setLeft(toolRows);
+    VBox perfBox = new VBox(4, perf, perfGraph.getCanvas());
+    perfBox.setAlignment(Pos.CENTER);
+    perfBox.setFillWidth(true);
+    HBox perfWrapper = new HBox(perfBox);
+    perfWrapper.setAlignment(Pos.CENTER);
+    HBox.setHgrow(perfWrapper, Priority.ALWAYS);
+    perfBox.widthProperty().addListener((o, ov, nv) -> perfGraph.setWidth(nv.doubleValue()));
+    toolbar.setCenter(perfWrapper);
     BorderPane.setAlignment(logoBox, Pos.TOP_RIGHT);
     toolbar.setRight(logoBox);
 
@@ -638,8 +679,10 @@ public class EditorApp extends Application {
         }
         if (fps != null) {
           double f = (dt > 0) ? (1000.0 / dt) : 0.0;
+          lastFps = f;
           fps.setText(String.format("%.0f fps", f));
         }
+        updatePerf(now);
       }
     };
     timer.start();
@@ -757,6 +800,129 @@ public class EditorApp extends Application {
 
   private String mapKey(KeyCode code) { return code == null ? "" : (code.getName() == null || code.getName().isBlank() ? code.toString() : code.getName()).toUpperCase(); }
   private int mapButton(MouseButton b) { if (b == MouseButton.PRIMARY) return 1; if (b == MouseButton.MIDDLE) return 2; if (b == MouseButton.SECONDARY) return 3; return 0; }
+
+  private void updatePerf(long nowNs) {
+    if (perf == null) return;
+    if (lastPerfUpdateNs > 0 && (nowNs - lastPerfUpdateNs) < 500_000_000L) return; // 0.5s throttle
+    lastPerfUpdateNs = nowNs;
+
+    double sysCpu = -1;
+    double procCpu = -1;
+    if (osBean != null) {
+      sysCpu = osBean.getSystemCpuLoad();
+      procCpu = osBean.getProcessCpuLoad();
+    }
+    Runtime rt = Runtime.getRuntime();
+    double usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024.0 * 1024.0);
+    double maxMb = rt.maxMemory() / (1024.0 * 1024.0);
+
+    String cpuStr = (sysCpu >= 0)
+        ? String.format("CPU %.0f%% sys / %.0f%% app", sysCpu * 100.0, procCpu >= 0 ? procCpu * 100.0 : 0.0)
+        : "CPU --";
+    String ramStr = String.format(" | RAM %.0f / %.0f MB", usedMb, maxMb);
+    String gpuStr = " | GPU n/a";
+    String fpsStr = String.format(" | FPS %.0f", lastFps);
+
+    cpuText.setText(cpuStr);
+    ramText.setText(ramStr);
+    gpuText.setText(gpuStr);
+    fpsText.setText(fpsStr);
+
+    perfGraph.pushSample(sysCpu >= 0 ? sysCpu : 0, maxMb > 0 ? (usedMb / maxMb) : 0, 0);
+  }
+
+  /** Tiny inline graph renderer for CPU/RAM usage. */
+  private static class PerfGraph {
+    private final Canvas canvas = new Canvas(320, 64);
+    private final double[] cpu = new double[240]; // ~4s at 60fps
+    private final double[] ram = new double[240];
+    private final double[] gpu = new double[240];
+    private int idx = 0;
+    private boolean filled = false;
+
+    public Canvas getCanvas() { return canvas; }
+    public void setWidth(double w) { canvas.setWidth(Math.max(160, w)); redraw(); }
+
+    public void pushSample(double cpu01, double ram01, double gpu01) {
+      int i = idx % cpu.length;
+      cpu[i] = clamp01(cpu01);
+      ram[i] = clamp01(ram01);
+      gpu[i] = clamp01(gpu01);
+      idx++;
+      if (idx >= cpu.length) filled = true;
+      redraw();
+    }
+
+    private void redraw() {
+      GraphicsContext g = canvas.getGraphicsContext2D();
+      double w = canvas.getWidth();
+      double h = canvas.getHeight();
+      g.setFill(GRID_BG);
+      g.fillRect(0, 0, w, h);
+
+      // grid
+      g.setStroke(GRID_LINE);
+      g.setLineWidth(1);
+      int rows = 4;
+      for (int r = 1; r < rows; r++) {
+        double y = h * r / rows;
+        g.strokeLine(0, y, w, y);
+      }
+      double stepX = w / 6.0;
+      for (double x = stepX; x < w; x += stepX) {
+        g.strokeLine(x, 0, x, h);
+      }
+
+      int samples = filled ? cpu.length : Math.min(idx, cpu.length);
+      if (samples <= 1) return;
+      double scaleX = w / (cpu.length - 1);
+
+      // RAM area
+      g.setFill(RAM_COLOR.deriveColor(0, 1, 1, 0.18));
+      g.beginPath();
+      for (int i = 0; i < samples; i++) {
+        int si = (idx - samples + i + cpu.length) % cpu.length;
+        double x = i * scaleX;
+        double y = h * (1 - ram[si]);
+        if (i == 0) g.moveTo(x, h);
+        g.lineTo(x, y);
+      }
+      g.lineTo((samples - 1) * scaleX, h);
+      g.closePath();
+      g.fill();
+
+      // CPU line
+      g.setStroke(CPU_COLOR.deriveColor(0, 1, 1, 0.9));
+      g.setLineWidth(2);
+      g.beginPath();
+      for (int i = 0; i < samples; i++) {
+        int si = (idx - samples + i + cpu.length) % cpu.length;
+        double x = i * scaleX;
+        double y = h * (1 - cpu[si]);
+        if (i == 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+
+      // GPU line
+      g.setStroke(GPU_COLOR.deriveColor(0, 1, 1, 0.9));
+      g.setLineWidth(2);
+      g.beginPath();
+      for (int i = 0; i < samples; i++) {
+        int si = (idx - samples + i + cpu.length) % cpu.length;
+        double x = i * scaleX;
+        double y = h * (1 - gpu[si]);
+        if (i == 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+
+    private double clamp01(double v) {
+      if (Double.isNaN(v) || Double.isInfinite(v)) return 0;
+      if (v < 0) return 0;
+      if (v > 1) return 1;
+      return v;
+    }
+  }
 
   private Region icon(String... styleClasses) {
     Region r = new Region();

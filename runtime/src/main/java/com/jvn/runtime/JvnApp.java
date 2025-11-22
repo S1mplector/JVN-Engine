@@ -4,6 +4,10 @@ import com.jvn.core.config.ApplicationConfig;
 import com.jvn.core.engine.Engine;
 import com.jvn.core.assets.AssetCatalog;
 import com.jvn.core.assets.AssetType;
+import com.jvn.core.assets.AssetManager;
+import com.jvn.core.assets.ClasspathAssetManager;
+import com.jvn.core.assets.FilesystemAssetManager;
+import com.jvn.core.assets.OverlayAssetManager;
 import com.jvn.core.vn.VnSettings;
 import com.jvn.core.vn.VnSettingsStore;
 import com.jvn.core.vn.save.VnSaveManager;
@@ -17,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.file.Paths;
 
 public class JvnApp {
   private static final Logger log = LoggerFactory.getLogger(JvnApp.class);
@@ -29,6 +34,7 @@ public class JvnApp {
     String ui = "fx"; // fx | swing
     String audioBackend = "fx"; // fx | simp3 | auto
     String jesScript = null;
+    String assetRoot = null;
 
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
@@ -60,6 +66,9 @@ public class JvnApp {
         case "--audio":
           if (i + 1 < args.length) audioBackend = args[++i];
           break;
+        case "--assets":
+          if (i + 1 < args.length) assetRoot = args[++i];
+          break;
         default:
           log.warn("Unknown argument: {}", a);
       }
@@ -70,8 +79,13 @@ public class JvnApp {
     // Init localization
     Localization.init(locale, Thread.currentThread().getContextClassLoader());
 
+    AssetManager manager = (assetRoot == null || assetRoot.isBlank())
+        ? new ClasspathAssetManager()
+        : new OverlayAssetManager(new FilesystemAssetManager(Paths.get(assetRoot)), new ClasspathAssetManager());
+    AssetCatalog.setDefaultManager(manager);
+
     // Log asset availability on startup
-    AssetCatalog assets = new AssetCatalog();
+    AssetCatalog assets = new AssetCatalog(manager);
     try {
       int img = assets.listImages().size();
       int aud = assets.listAudio().size();

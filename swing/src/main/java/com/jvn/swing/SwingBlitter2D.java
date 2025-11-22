@@ -9,8 +9,15 @@ import java.awt.geom.Path2D;
 import java.awt.geom.Arc2D;
 import java.awt.LinearGradientPaint;
 import java.awt.RadialGradientPaint;
+import java.awt.image.BufferedImage;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
+import java.net.URL;
+import javax.imageio.ImageIO;
 
 public class SwingBlitter2D implements Blitter2D {
   private Graphics2D g2;
@@ -24,6 +31,8 @@ public class SwingBlitter2D implements Blitter2D {
   private Path2D currentPath = null;
   private String hAlign = "left";
   private String vAlign = "baseline";
+  private final Map<String, BufferedImage> imageCache = new HashMap<>();
+  private final Set<String> missing = new HashSet<>();
 
   public SwingBlitter2D(Graphics2D g2) {
     this.g2 = (Graphics2D) g2.create();
@@ -134,12 +143,50 @@ public class SwingBlitter2D implements Blitter2D {
 
   @Override
   public void drawImage(String classpath, double x, double y, double w, double h) {
-    // No external assets expected; leave no-op or implement classpath resource draw if needed
+    BufferedImage img = loadImage(classpath);
+    if (img == null) {
+      reportMissing(classpath);
+      drawMissingPlaceholder(x, y, w, h);
+      return;
+    }
+    g2.drawImage(
+      img,
+      (int) Math.round(x),
+      (int) Math.round(y),
+      (int) Math.round(w),
+      (int) Math.round(h),
+      null
+    );
   }
 
   @Override
   public void drawImageRegion(String classpath, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh) {
-    // No external assets expected
+    BufferedImage img = loadImage(classpath);
+    if (img == null) {
+      reportMissing(classpath);
+      drawMissingPlaceholder(dx, dy, dw, dh);
+      return;
+    }
+    if (sw <= 0 || sh <= 0 || dw == 0 || dh == 0) return;
+
+    int x1 = (int) Math.round(sx);
+    int y1 = (int) Math.round(sy);
+    int x2 = x1 + (int) Math.round(sw);
+    int y2 = y1 + (int) Math.round(sh);
+
+    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
+    x2 = Math.min(img.getWidth(), x2); y2 = Math.min(img.getHeight(), y2);
+    if (x2 <= x1 || y2 <= y1) return;
+
+    BufferedImage sub = img.getSubimage(x1, y1, x2 - x1, y2 - y1);
+    g2.drawImage(
+      sub,
+      (int) Math.round(dx),
+      (int) Math.round(dy),
+      (int) Math.round(dw),
+      (int) Math.round(dh),
+      null
+    );
   }
 
   @Override
@@ -302,5 +349,41 @@ public class SwingBlitter2D implements Blitter2D {
   public void setTextAlign(String hAlign, String vAlign) {
     if (hAlign != null) this.hAlign = hAlign.toLowerCase();
     if (vAlign != null) this.vAlign = vAlign.toLowerCase();
+  }
+
+  private BufferedImage loadImage(String path) {
+    if (path == null || path.isBlank()) return null;
+    BufferedImage cached = imageCache.get(path);
+    if (cached != null) return cached;
+    try {
+      ClassLoader loader = getClass().getClassLoader();
+      URL url = loader.getResource(path);
+      if (url == null) return null;
+      BufferedImage img = ImageIO.read(url);
+      if (img != null) imageCache.put(path, img);
+      return img;
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  private void drawMissingPlaceholder(double x, double y, double w, double h) {
+    Color oldColor = g2.getColor();
+    Stroke oldStroke = g2.getStroke();
+    g2.setColor(new Color(255, 0, 255, (int) (alpha * 255)));
+    g2.fill(new java.awt.geom.Rectangle2D.Double(x, y, w, h));
+    g2.setColor(new Color(0, 0, 0, (int) (alpha * 255)));
+    g2.setStroke(new BasicStroke(Math.max(1f, (float) Math.min(w, h) * 0.05f)));
+    g2.draw(new java.awt.geom.Line2D.Double(x, y, x + w, y + h));
+    g2.draw(new java.awt.geom.Line2D.Double(x + w, y, x, y + h));
+    g2.setColor(oldColor);
+    g2.setStroke(oldStroke);
+  }
+
+  private void reportMissing(String path) {
+    if (path == null || path.isBlank()) return;
+    if (missing.add(path)) {
+      System.err.println("Swing: missing image asset '" + path + "'");
+    }
   }
 }

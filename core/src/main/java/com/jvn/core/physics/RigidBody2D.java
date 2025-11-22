@@ -16,6 +16,7 @@ public class RigidBody2D {
   private boolean isStatic = false;
   private double restitution = 0.2; // bounciness
   private boolean sensor = false;
+  private double linearDamping = 0.0; // per-second damping factor
 
   public static RigidBody2D box(double x, double y, double w, double h) {
     RigidBody2D b = new RigidBody2D();
@@ -54,5 +55,10 @@ public class RigidBody2D {
 
   public boolean isSensor() { return sensor; }
   public void setSensor(boolean sensor) { this.sensor = sensor; }
-}
 
+  public double getLinearDamping() { return linearDamping; }
+  public void setLinearDamping(double damping) {
+    if (Double.isNaN(damping) || Double.isInfinite(damping) || damping < 0) damping = 0;
+    this.linearDamping = damping;
+  }
+}

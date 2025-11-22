@@ -2,6 +2,9 @@ package com.jvn.swing;
 
 import com.jvn.core.engine.Engine;
 import com.jvn.core.scene2d.Scene2D;
+import com.jvn.core.scene2d.Scene2DBase;
+import com.jvn.core.graphics.Camera2D;
+import com.jvn.core.graphics.ViewportScaler2D;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,8 +25,20 @@ public class SwingLauncher {
         if (engine != null) {
           var scene = engine.scenes().peek();
           if (scene instanceof Scene2D s2d) {
+            if (scene instanceof Scene2DBase s2db) {
+              if (engine != null) s2db.setInput(engine.input());
+              if (s2db.getCamera() == null) s2db.setCamera(new Camera2D());
+            }
             SwingBlitter2D bl = new SwingBlitter2D(g2);
-            s2d.render(bl, getWidth(), getHeight());
+            double targetW = (engine.getConfig() != null) ? engine.getConfig().width() : getWidth();
+            double targetH = (engine.getConfig() != null) ? engine.getConfig().height() : getHeight();
+            var vp = ViewportScaler2D.fit(targetW, targetH, getWidth(), getHeight());
+            bl.clear(0, 0, 0, 1);
+            bl.push();
+            bl.translate(vp.offsetX(), vp.offsetY());
+            bl.scale(vp.scale(), vp.scale());
+            s2d.render(bl, vp.targetWidth(), vp.targetHeight());
+            bl.pop();
             bl.dispose();
           } else {
             g2.setColor(Color.WHITE);

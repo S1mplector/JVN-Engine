@@ -2,9 +2,10 @@ package com.jvn.core.assets;
 
 public class AssetCatalog {
   private final AssetManager manager;
+  private static AssetManager defaultManager = new ClasspathAssetManager();
 
   public AssetCatalog() {
-    this(new ClasspathAssetManager());
+    this(defaultManager);
   }
 
   public AssetCatalog(AssetManager manager) {
@@ -31,4 +32,8 @@ public class AssetCatalog {
   public java.util.List<String> listAudio() { return list(AssetPaths.AUDIO); }
   public java.util.List<String> listScripts() { return list(AssetPaths.SCRIPTS); }
   public java.util.List<String> listFonts() { return list(AssetPaths.FONTS); }
+
+  public static void setDefaultManager(AssetManager m) {
+    if (m != null) defaultManager = m;
+  }
 }

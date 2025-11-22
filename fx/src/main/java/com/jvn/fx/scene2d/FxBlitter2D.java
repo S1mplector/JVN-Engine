@@ -10,12 +10,15 @@ import javafx.scene.text.FontWeight;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 public class FxBlitter2D implements Blitter2D {
   private final GraphicsContext gc;
   private double viewportW = 0;
   private double viewportH = 0;
   private final Map<String, Image> cache = new HashMap<>();
+  private final Set<String> missing = new HashSet<>();
 
   public FxBlitter2D(GraphicsContext gc) {
     this.gc = gc;
@@ -94,7 +97,12 @@ public class FxBlitter2D implements Blitter2D {
   public void drawImage(String classpath, double x, double y, double w, double h) {
     if (classpath == null || classpath.isBlank()) return;
     Image img = cache.computeIfAbsent(classpath, this::loadImage);
-    if (img != null) gc.drawImage(img, x, y, w, h);
+    if (img != null) {
+      gc.drawImage(img, x, y, w, h);
+    } else {
+      reportMissing(classpath);
+      drawMissingPlaceholder(x, y, w, h);
+    }
   }
 
   @Override
@@ -104,6 +112,9 @@ public class FxBlitter2D implements Blitter2D {
     Image img = cache.computeIfAbsent(classpath, this::loadImage);
     if (img != null) {
       gc.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    } else {
+      reportMissing(classpath);
+      drawMissingPlaceholder(dx, dy, dw, dh);
     }
   }
 
@@ -135,4 +146,20 @@ public class FxBlitter2D implements Blitter2D {
   }
 
   private double clamp01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+  private void drawMissingPlaceholder(double x, double y, double w, double h) {
+    gc.setFill(Color.color(1, 0, 1, 0.8)); // magenta box
+    gc.fillRect(x, y, w, h);
+    gc.setStroke(Color.color(0, 0, 0, 0.9));
+    gc.setLineWidth(Math.max(1, Math.min(w, h) * 0.05));
+    gc.strokeLine(x, y, x + w, y + h);
+    gc.strokeLine(x + w, y, x, y + h);
+  }
+
+  private void reportMissing(String path) {
+    if (path == null || path.isBlank()) return;
+    if (missing.add(path)) {
+      System.err.println("FX: missing image asset '" + path + "'");
+    }
+  }
 }

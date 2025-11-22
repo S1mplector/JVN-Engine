@@ -97,6 +97,10 @@ public class Example2DScene extends Scene2DBase {
   @Override public void update(long deltaMs) {
     double dt = deltaMs / 1000.0;
     if (input != null && camera != null) {
+      if (actions == null) {
+        actions = new ActionMap(input);
+        actions.bindKey("up", "W").bindKey("down", "S").bindKey("left", "A").bindKey("right", "D");
+      }
       double speed = 400 * dt;
       boolean moved = false;
       if (actions != null && actions.isDown("up")) { camera.setTarget(camera.getTargetX(), camera.getTargetY() - speed); moved = true; }
@@ -142,4 +146,3 @@ public class Example2DScene extends Scene2DBase {
     }
   }
 }
-

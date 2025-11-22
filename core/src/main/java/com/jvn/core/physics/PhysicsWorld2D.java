@@ -12,6 +12,7 @@ public class PhysicsWorld2D {
   private final List<Rect> staticRects = new ArrayList<>();
   private PhysicsSensorListener sensorListener;
   private CollisionListener collisionListener;
+  private double maxStepMs = 50.0; // clamp excessively large frame steps
 
   public static class RaycastHit {
     public RigidBody2D body;
@@ -42,6 +43,8 @@ public class PhysicsWorld2D {
   public void addBody(RigidBody2D b) { if (b != null) bodies.add(b); }
   public void removeBody(RigidBody2D b) { bodies.remove(b); }
   public List<RigidBody2D> getBodies() { return bodies; }
+  public void setMaxStepMs(double ms) { this.maxStepMs = ms <= 0 ? 0 : ms; }
+  public double getMaxStepMs() { return maxStepMs; }
 
   public RaycastHit raycast(double x1, double y1, double x2, double y2) {
     double dx = x2 - x1;
@@ -63,11 +66,19 @@ public class PhysicsWorld2D {
   }
 
   public void step(double deltaMs) {
-    double dt = deltaMs / 1000.0;
+    if (deltaMs < 0) return;
+    double stepMs = deltaMs;
+    if (maxStepMs > 0 && stepMs > maxStepMs) stepMs = maxStepMs;
+    double dt = stepMs / 1000.0;
+    if (dt <= 0) return;
     // Integrate velocities and apply gravity
     for (RigidBody2D b : bodies) {
       if (b.isStatic()) continue;
       b.setVelocity(b.getVx() + gravityX * dt, b.getVy() + gravityY * dt);
+      if (b.getLinearDamping() > 0) {
+        double damp = Math.max(0.0, 1.0 - b.getLinearDamping() * dt);
+        b.setVelocity(b.getVx() * damp, b.getVy() * damp);
+      }
       double nx = b.getX() + b.getVx() * dt;
       double ny = b.getY() + b.getVy() * dt;
       b.setPosition(nx, ny);

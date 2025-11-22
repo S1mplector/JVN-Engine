@@ -177,6 +177,8 @@ public class JesScene2D extends Scene2DBase {
   }
   public void setPlayerName(String name) { this.playerName = name; }
   public void setGridSize(double w, double h) { this.gridW = w; this.gridH = h; }
+  public void setPlayerFacing(String facing) { if (facing != null && !facing.isBlank()) this.playerFacing = facing; }
+  public String getPlayerFacing() { return playerFacing; }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
@@ -656,6 +658,12 @@ public class JesScene2D extends Scene2DBase {
     return false;
   }
 
+  public boolean isWorldBlocked(double x, double y) { return isBlockedWorld(x, y); }
+  public boolean isTileBlocked(int tx, int ty) { return isBlockedTile(tx, ty); }
+  public com.jvn.core.physics.PhysicsWorld2D.RaycastHit raycast(double x1, double y1, double x2, double y2) {
+    return world == null ? null : world.raycast(x1, y1, x2, y2);
+  }
+
   private void checkTriggersAt(double x, double y) {
     if (triggerLayers.isEmpty() || gridW == 0 || gridH == 0) return;
     int tx = (int) Math.floor(x / gridW);
@@ -749,6 +757,9 @@ public class JesScene2D extends Scene2DBase {
         String did = npcEntity.getDialogueId();
         if (did != null && !did.isBlank()) props.put("dialogueId", did);
       }
+      props.put("facing", d);
+      props.put("heroX", hero.getX());
+      props.put("heroY", hero.getY());
       invokeCall("interactNpc", props);
     }
   }
@@ -956,5 +967,114 @@ public class JesScene2D extends Scene2DBase {
     if (e instanceof com.jvn.core.scene2d.Sprite2D s) s.setAlpha(aa);
     else if (e instanceof com.jvn.core.scene2d.Label2D l) l.setColor(l.getColorR(), l.getColorG(), l.getColorB(), aa);
     else if (e instanceof com.jvn.core.scene2d.Panel2D p) p.setFill(p.getFillR(), p.getFillG(), p.getFillB(), aa);
+  }
+
+  // --- State save/load helpers ---
+  public JesSceneState saveState() {
+    JesSceneState st = new JesSceneState();
+    st.playerName = this.playerName;
+    st.playerFacing = this.playerFacing;
+    if (playerName != null) {
+      Entity2D hero = named.get(playerName);
+      if (hero != null) st.playerPosition = new double[]{ hero.getX(), hero.getY() };
+    }
+    for (Map.Entry<String, Entity2D> entry : named.entrySet()) {
+      Entity2D e = entry.getValue();
+      if (e == null) continue;
+      st.entityPositions.put(entry.getKey(), new double[]{ e.getX(), e.getY() });
+    }
+    for (Map.Entry<String, Stats> entry : statsByEntity.entrySet()) {
+      Stats s = entry.getValue();
+      if (s == null) continue;
+      JesSceneState.StatsSnapshot snap = new JesSceneState.StatsSnapshot();
+      snap.maxHp = s.getMaxHp();
+      snap.hp = s.getHp();
+      snap.maxMp = s.getMaxMp();
+      snap.mp = s.getMp();
+      snap.atk = s.getBaseAtk();
+      snap.def = s.getBaseDef();
+      snap.speed = s.getBaseSpeed();
+      snap.atkBonus = s.getAtkBonus();
+      snap.defBonus = s.getDefBonus();
+      snap.speedBonus = s.getSpeedBonus();
+      snap.deathCall = s.getDeathCall();
+      snap.removeOnDeath = s.isRemoveOnDeath();
+      st.stats.put(entry.getKey(), snap);
+    }
+    for (Map.Entry<String, Inventory> entry : inventories.entrySet()) {
+      Inventory inv = entry.getValue();
+      if (inv == null) continue;
+      st.inventories.put(entry.getKey(), new HashMap<>(inv.getItemCounts()));
+      st.inventorySlots.put(entry.getKey(), inv.getSlots());
+    }
+    for (Map.Entry<String, Equipment> entry : equipmentByEntity.entrySet()) {
+      Equipment eq = entry.getValue();
+      if (eq == null) continue;
+      st.equipment.put(entry.getKey(), new HashMap<>(eq.getSlots()));
+    }
+    return st;
+  }
+
+  public void loadState(JesSceneState state) {
+    if (state == null) return;
+    if (state.entityPositions != null) {
+      for (Map.Entry<String,double[]> entry : state.entityPositions.entrySet()) {
+        Entity2D e = named.get(entry.getKey());
+        double[] pos = entry.getValue();
+        if (e != null && pos != null && pos.length >= 2) {
+          e.setPosition(pos[0], pos[1]);
+        }
+      }
+    }
+    if (state.stats != null) {
+      for (Map.Entry<String, JesSceneState.StatsSnapshot> entry : state.stats.entrySet()) {
+        JesSceneState.StatsSnapshot snap = entry.getValue();
+        if (snap == null) continue;
+        Stats s = statsByEntity.computeIfAbsent(entry.getKey(), k -> new Stats());
+        s.setMaxHp(snap.maxHp);
+        s.setHp(snap.hp);
+        s.setMaxMp(snap.maxMp);
+        s.setMp(snap.mp);
+        s.setAtk(snap.atk);
+        s.setDef(snap.def);
+        s.setSpeed(snap.speed);
+        s.setAtkBonus(snap.atkBonus);
+        s.setDefBonus(snap.defBonus);
+        s.setSpeedBonus(snap.speedBonus);
+        s.setDeathCall(snap.deathCall);
+        s.setRemoveOnDeath(snap.removeOnDeath);
+      }
+    }
+    if (state.inventories != null) {
+      for (Map.Entry<String, Map<String,Integer>> entry : state.inventories.entrySet()) {
+        Map<String,Integer> counts = entry.getValue();
+        if (counts == null) continue;
+        Inventory inv = inventories.computeIfAbsent(entry.getKey(), k -> new Inventory());
+        Integer slots = state.inventorySlots.get(entry.getKey());
+        if (slots != null) inv.setSlots(slots);
+        inv.getItemCounts().clear();
+        inv.getItemCounts().putAll(counts);
+      }
+    }
+    if (state.equipment != null) {
+      for (Map.Entry<String, Map<String,String>> entry : state.equipment.entrySet()) {
+        Map<String,String> slots = entry.getValue();
+        if (slots == null) continue;
+        Equipment eq = equipmentByEntity.computeIfAbsent(entry.getKey(), k -> new Equipment());
+        eq.getSlots().clear();
+        eq.getSlots().putAll(slots);
+        recomputeEquipmentBonuses(entry.getKey());
+      }
+    }
+    if (state.playerName != null && !state.playerName.isBlank()) {
+      this.playerName = state.playerName;
+    }
+    if (state.playerFacing != null && !state.playerFacing.isBlank()) {
+      this.playerFacing = state.playerFacing;
+    }
+    if (playerName != null && state.playerPosition != null && state.playerPosition.length >= 2) {
+      Entity2D hero = named.get(playerName);
+      if (hero != null) hero.setPosition(state.playerPosition[0], state.playerPosition[1]);
+    }
   }
 }

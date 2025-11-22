@@ -51,6 +51,7 @@ public class Stats {
   }
 
   public double getAtk() { return atk + atkBonus; }
+  public double getBaseAtk() { return atk; }
 
   public void setAtk(double atk) { this.atk = atk; }
 
@@ -59,6 +60,7 @@ public class Stats {
   public void setAtkBonus(double atkBonus) { this.atkBonus = atkBonus; }
 
   public double getDef() { return def + defBonus; }
+  public double getBaseDef() { return def; }
 
   public void setDef(double def) { this.def = def; }
 
@@ -67,6 +69,7 @@ public class Stats {
   public void setDefBonus(double defBonus) { this.defBonus = defBonus; }
 
   public double getSpeed() { return speed + speedBonus; }
+  public double getBaseSpeed() { return speed; }
 
   public void setSpeed(double speed) { this.speed = speed; }
 
