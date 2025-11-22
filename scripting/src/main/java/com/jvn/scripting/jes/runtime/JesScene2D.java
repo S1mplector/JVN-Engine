@@ -15,6 +15,7 @@ import com.jvn.core.physics.RigidBody2D;
 import com.jvn.core.scene2d.Blitter2D;
 import com.jvn.core.scene2d.CharacterEntity2D;
 import com.jvn.core.scene2d.Entity2D;
+import com.jvn.core.scene2d.ParticleEmitter2D;
 import com.jvn.core.scene2d.Scene2DBase;
 import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
