@@ -127,6 +127,7 @@ public class RuntimeVnInterop implements VnInterop {
         if (msg != null) vnScene.getState().showHudMessage(String.valueOf(msg), 1500);
       });
       js.registerCall("pop", props -> engine.scenes().pop());
+      new JesVnBridge(engine).attach(js);
       java.util.function.Consumer<java.util.Map<String,Object>> doReturn = props -> {
         // Set variables if provided
         if (props != null) {

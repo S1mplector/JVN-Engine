@@ -106,6 +106,7 @@ public class JvnApp {
         AssetCatalog cat = new AssetCatalog();
         InputStream in = cat.open(com.jvn.core.assets.AssetType.SCRIPT, jesScript);
         var scene = JesLoader.load(in);
+        new JesVnBridge(engine).attach(scene);
         engine.scenes().push(scene);
       } catch (Exception e) {
         log.warn("Failed to load JES script '{}': {}. Loading inline sample.", jesScript, e.toString());
@@ -117,6 +118,7 @@ public class JvnApp {
               "}\n";
           var in2 = new ByteArrayInputStream(sample.getBytes());
           var scene = JesLoader.load(in2);
+          new JesVnBridge(engine).attach(scene);
           engine.scenes().push(scene);
         } catch (Exception ex) {
           log.warn("Inline JES sample failed: {}", ex.toString());

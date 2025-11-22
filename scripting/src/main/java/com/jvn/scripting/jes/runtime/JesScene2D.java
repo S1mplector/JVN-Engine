@@ -33,6 +33,7 @@ public class JesScene2D extends Scene2DBase {
   private final Map<String, Ai2D> aiByEntity = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
   private final Map<String, double[]> spawnPositions = new HashMap<>();
+  private boolean paused = false;
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
   private int tlIndex = 0;
@@ -242,6 +243,8 @@ public class JesScene2D extends Scene2DBase {
     this.cameraFollowTarget = target;
     if (lerp > 0) this.cameraFollowLerp = lerp;
   }
+  public void setPaused(boolean paused) { this.paused = paused; }
+  public boolean isPaused() { return paused; }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
@@ -259,6 +262,7 @@ public class JesScene2D extends Scene2DBase {
 
   @Override
   public void update(long deltaMs) {
+    if (paused) return;
     super.update(deltaMs);
     world.step(deltaMs);
 
