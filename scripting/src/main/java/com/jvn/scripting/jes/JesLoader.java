@@ -88,7 +88,7 @@ public class JesLoader {
             triggerCall = str(l.props, "call", null);
           }
           if (triggerCall != null && !triggerCall.isBlank()) {
-            scene.addTriggerLayer(tilemap, triggerCall, l.props);
+            scene.addTriggerLayer(m.name, tilemap, triggerCall, l.props);
           }
         }
       }

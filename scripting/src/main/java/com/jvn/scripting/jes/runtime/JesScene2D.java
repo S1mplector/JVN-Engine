@@ -41,7 +41,9 @@ public class JesScene2D extends Scene2DBase {
     final TileMap2D tilemap;
     final String call;
     final Map<String,Object> props;
-    TriggerLayer(TileMap2D tilemap, String call, Map<String,Object> props) {
+    final String mapName;
+    TriggerLayer(String mapName, TileMap2D tilemap, String call, Map<String,Object> props) {
+      this.mapName = mapName;
       this.tilemap = tilemap;
       this.call = call;
       this.props = props;
@@ -68,9 +70,12 @@ public class JesScene2D extends Scene2DBase {
   public PhysicsWorld2D getWorld() { return world; }
   public void addCollisionTilemap(TileMap2D tm) { if (tm != null) collisionTilemaps.add(tm); }
   public void addTriggerLayer(TileMap2D tm, String call, Map<String,Object> props) {
+    addTriggerLayer(null, tm, call, props);
+  }
+  public void addTriggerLayer(String mapName, TileMap2D tm, String call, Map<String,Object> props) {
     if (tm == null || call == null || call.isBlank()) return;
     Map<String,Object> copy = (props == null) ? new HashMap<>() : new HashMap<>(props);
-    triggerLayers.add(new TriggerLayer(tm, call, copy));
+    triggerLayers.add(new TriggerLayer(mapName, tm, call, copy));
   }
   public void setDebug(boolean d) { this.debug = d; }
   public void addBinding(String key, String action, Map<String,Object> props) { bindings.add(new Binding(key, action, props)); }
@@ -85,11 +90,16 @@ public class JesScene2D extends Scene2DBase {
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public void invokeCall(String name, Map<String,Object> props) {
     if (name == null || name.isBlank()) return;
+    Map<String,Object> actualProps = (props == null) ? new HashMap<>() : new HashMap<>(props);
+    // Built-in map warp helper: can be triggered directly from triggers using triggerCall: "warpMap"
+    if ("warpMap".equals(name)) {
+      warpMap(actualProps);
+    }
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
-      try { h.accept(props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
+      try { h.accept(actualProps); } catch (Exception ignored) {}
     } else if (actionHandler != null) {
-      try { actionHandler.accept(name, props == null ? java.util.Collections.emptyMap() : props); } catch (Exception ignored) {}
+      try { actionHandler.accept(name, actualProps); } catch (Exception ignored) {}
     }
   }
   public void setPlayerName(String name) { this.playerName = name; }
@@ -411,6 +421,9 @@ public class JesScene2D extends Scene2DBase {
       props.put("tileX", (double) tx);
       props.put("tileY", (double) ty);
       props.put("tile", (double) tile);
+      if (tl.mapName != null && !tl.mapName.isBlank()) {
+        props.put("map", tl.mapName);
+      }
       invokeCall(tl.call, props);
     }
   }
@@ -490,6 +503,36 @@ public class JesScene2D extends Scene2DBase {
       }
       invokeCall("interactNpc", props);
     }
+  }
+
+  private void warpMap(Map<String,Object> props) {
+    if (playerName == null || playerName.isBlank()) return;
+    if (gridW == 0 || gridH == 0) return;
+    Entity2D hero = named.get(playerName);
+    if (hero == null) return;
+
+    double wx;
+    double wy;
+
+    // Prefer explicit target tile coordinates
+    if (props.containsKey("toTileX") || props.containsKey("toTileY")) {
+      double tx = toNum(props.get("toTileX"), hero.getX() / gridW);
+      double ty = toNum(props.get("toTileY"), hero.getY() / gridH);
+      wx = tx * gridW;
+      wy = ty * gridH;
+    } else if (props.containsKey("toX") || props.containsKey("toY")) {
+      wx = toNum(props.get("toX"), hero.getX());
+      wy = toNum(props.get("toY"), hero.getY());
+    } else if (props.containsKey("tileX") || props.containsKey("tileY")) {
+      double tx = toNum(props.get("tileX"), hero.getX() / gridW);
+      double ty = toNum(props.get("tileY"), hero.getY() / gridH);
+      wx = tx * gridW;
+      wy = ty * gridH;
+    } else {
+      return; // no usable coordinates
+    }
+
+    hero.setPosition(wx, wy);
   }
 
   private void spawnBox(Map<String,Object> props) {
