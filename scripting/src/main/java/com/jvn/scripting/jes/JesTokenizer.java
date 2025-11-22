@@ -48,7 +48,8 @@ public class JesTokenizer {
           case ',': out.add(tok(JesTokenType.COMMA, ",")); step(); break;
           case '(': out.add(tok(JesTokenType.LPAREN, "(")); step(); break;
           case ')': out.add(tok(JesTokenType.RPAREN, ")")); step(); break;
-          default: step(); // skip unknown
+          default:
+            throw new JesParseException("Unexpected character '" + c + "'", line, col);
         }
       }
     }
@@ -84,8 +85,11 @@ public class JesTokenizer {
         else sb.append(nx);
       } else sb.append(c);
     }
-    if (i < n && src.charAt(i) == '"') { stepNoTrack(); }
-    return new JesToken(JesTokenType.STRING, sb.toString(), line, startCol);
+    if (i < n && src.charAt(i) == '"') {
+      stepNoTrack();
+      return new JesToken(JesTokenType.STRING, sb.toString(), line, startCol);
+    }
+    throw new JesParseException("Unterminated string literal", line, startCol);
   }
 
   private void skipWs() {

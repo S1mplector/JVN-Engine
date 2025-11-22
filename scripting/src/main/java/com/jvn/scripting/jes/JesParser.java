@@ -2,6 +2,8 @@ package com.jvn.scripting.jes;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.jvn.scripting.jes.JesTokenType.COLON;
 import static com.jvn.scripting.jes.JesTokenType.COMMA;
@@ -19,70 +21,96 @@ public class JesParser {
   private final List<JesToken> toks;
   private int i = 0;
 
+  private static final Map<String, Set<String>> COMPONENT_PROPS = Map.ofEntries(
+    Map.entry("Panel2D", Set.of("x", "y", "w", "h", "fill")),
+    Map.entry("Sprite2D", Set.of("image", "x", "y", "w", "h", "alpha", "originX", "originY", "sx", "sy", "sw", "sh", "dw", "dh")),
+    Map.entry("Label2D", Set.of("text", "x", "y", "size", "bold", "color", "align")),
+    Map.entry("ParticleEmitter2D", Set.of("x", "y", "emissionRate", "minLife", "maxLife", "minSize", "maxSize", "endSizeScale", "minSpeed", "maxSpeed", "minAngle", "maxAngle", "gravityY", "texture", "additive", "startColor", "endColor")),
+    Map.entry("PhysicsBody2D", Set.of("shape", "x", "y", "w", "h", "r", "mass", "restitution", "static", "sensor", "vx", "vy", "color")),
+    Map.entry("Character2D", Set.of("spriteSheet", "frameW", "frameH", "cols", "drawW", "drawH", "x", "y", "startTileX", "startTileY", "speed", "originX", "originY", "animations", "startAnim", "dialogueId", "z", "controllable")),
+    Map.entry("Stats", Set.of("maxHp", "hp", "maxMp", "mp", "atk", "def", "speed", "onDeathCall", "removeOnDeath")),
+    Map.entry("Inventory", Set.of("slots", "items")),
+    Map.entry("Ai2D", Set.of("type", "target", "aggroRange", "attackRange", "attackIntervalMs", "attackAmount", "moveSpeed", "attackCooldownMs"))
+  );
+  private static final Set<String> COMPONENT_FREE_PROPS = Set.of("Equipment");
+
+  private static final Map<String, Set<String>> TIMELINE_PROPS = Map.ofEntries(
+    Map.entry("move", Set.of("x", "y", "dur", "easing")),
+    Map.entry("walkToTile", Set.of("tx", "ty", "x", "y", "dur", "easing")),
+    Map.entry("rotate", Set.of("deg", "dur", "easing")),
+    Map.entry("scale", Set.of("sx", "sy", "dur", "easing")),
+    Map.entry("fade", Set.of("alpha", "dur", "easing")),
+    Map.entry("visible", Set.of("value")),
+    Map.entry("cameraMove", Set.of("x", "y", "dur", "easing")),
+    Map.entry("cameraZoom", Set.of("zoom", "dur", "easing")),
+    Map.entry("cameraShake", Set.of("ampX", "ampY", "dur")),
+    Map.entry("damage", Set.of("amount", "source")),
+    Map.entry("heal", Set.of("amount", "source"))
+  );
+  private static final Set<String> TIMELINE_FREE_PROPS = Set.of("call");
+
   public JesParser(List<JesToken> toks) { this.toks = toks == null ? new ArrayList<>() : toks; }
 
   private JesToken peek() { return i < toks.size() ? toks.get(i) : new JesToken(EOF, "", -1, -1); }
   private JesToken prev() { return toks.get(Math.max(0, i-1)); }
   private boolean match(JesTokenType t) { if (peek().type == t) { i++; return true; } return false; }
-  private JesToken expect(JesTokenType t, String msg) { if (match(t)) return prev(); throw error(msg + " at " + peek()); }
-  private RuntimeException error(String m) { return new RuntimeException(m); }
+  private JesToken expect(JesTokenType t, String msg) {
+    if (match(t)) return prev();
+    JesToken p = peek();
+    throw new JesParseException("Expected " + msg + " but found '" + p.lexeme + "'", p.line, p.col);
+  }
+  private JesParseException error(String m) {
+    JesToken p = peek();
+    return new JesParseException(m, p.line, p.col);
+  }
+  private JesParseException error(String m, JesToken at) {
+    if (at == null) return error(m);
+    return new JesParseException(m, at.line, at.col);
+  }
 
   public JesAst.Program parseProgram() {
     JesAst.Program p = new JesAst.Program();
     while (peek().type != EOF) {
-      if (match(IDENT) && "scene".equals(prev().lexeme)) {
-        p.scenes.add(parseScene());
-      } else {
-        // Skip unknown token
-        i++;
+      JesToken kw = expect(IDENT, "'scene'");
+      if (!"scene".equals(kw.lexeme)) {
+        throw error("Expected 'scene' declaration", kw);
       }
+      p.scenes.add(parseScene());
     }
     return p;
   }
 
   private JesAst.SceneDecl parseScene() {
     JesAst.SceneDecl s = new JesAst.SceneDecl();
-    s.name = expect(STRING, "scene name").lexeme;
+    JesToken nameTok = expect(STRING, "scene name");
+    s.name = nameTok.lexeme;
     expect(LBRACE, "'{'" );
     while (!match(RBRACE)) {
-      if (peek().type == IDENT) {
-        String word = peek().lexeme;
-        if ("tileset".equals(word)) {
-          match(IDENT); // consume 'tileset'
-          s.tilesets.add(parseTileset());
-        } else if ("item".equals(word)) {
-          match(IDENT); // consume 'item'
-          s.items.add(parseItem());
-        } else if ("map".equals(word)) {
-          match(IDENT); // consume 'map'
-          s.maps.add(parseMap());
-        } else if ("entity".equals(word)) {
-          match(IDENT); // consume 'entity'
-          s.entities.add(parseEntity());
-        } else if ("on".equals(word)) {
-          match(IDENT); // consume 'on'
-          s.bindings.add(parseBinding());
-        } else if ("timeline".equals(word)) {
-          match(IDENT); // consume 'timeline'
-          expect(LBRACE, "'{'" );
-          while (!match(RBRACE)) {
-            if (peek().type == IDENT) {
-              String kind = peek().lexeme;
-              match(IDENT);
-              s.timeline.add(parseTimelineAction(kind));
-            } else {
-              i++;
-            }
-          }
-        } else {
-          // scene-level prop: key : value
-          String key = expect(IDENT, "identifier").lexeme;
-          expect(COLON, ":");
-          Object val = parseValue();
-          s.props.put(key, val);
+      if (peek().type == EOF) throw error("Unterminated scene block");
+      JesToken wordTok = expect(IDENT, "identifier");
+      String word = wordTok.lexeme;
+      if ("tileset".equals(word)) {
+        s.tilesets.add(parseTileset());
+      } else if ("item".equals(word)) {
+        s.items.add(parseItem());
+      } else if ("map".equals(word)) {
+        s.maps.add(parseMap());
+      } else if ("entity".equals(word)) {
+        s.entities.add(parseEntity());
+      } else if ("on".equals(word)) {
+        s.bindings.add(parseBinding());
+      } else if ("timeline".equals(word)) {
+        expect(LBRACE, "'{'" );
+        while (!match(RBRACE)) {
+          if (peek().type == EOF) throw error("Unterminated timeline block");
+          JesToken actionTok = expect(IDENT, "timeline action");
+          s.timeline.add(parseTimelineAction(actionTok));
         }
       } else {
-        i++; // skip unknown token
+        // scene-level prop: key : value
+        expect(COLON, ":");
+        Object val = parseValue();
+        s.props.put(word, val);
       }
     }
     return s;
@@ -93,14 +121,11 @@ public class JesParser {
     t.name = expect(STRING, "tileset name").lexeme;
     expect(LBRACE, "'{'");
     while (!match(RBRACE)) {
-      if (match(IDENT)) {
-        String key = prev().lexeme;
-        expect(COLON, ":");
-        Object val = parseValue();
-        t.props.put(key, val);
-      } else {
-        i++;
-      }
+      if (peek().type == EOF) throw error("Unterminated tileset block");
+      String key = expect(IDENT, "identifier").lexeme;
+      expect(COLON, ":");
+      Object val = parseValue();
+      t.props.put(key, val);
     }
     return t;
   }
@@ -110,14 +135,11 @@ public class JesParser {
     it.id = expect(STRING, "item id").lexeme;
     expect(LBRACE, "'{'" );
     while (!match(RBRACE)) {
-      if (match(IDENT)) {
-        String key = prev().lexeme;
-        expect(COLON, ":");
-        Object val = parseValue();
-        it.props.put(key, val);
-      } else {
-        i++;
-      }
+      if (peek().type == EOF) throw error("Unterminated item block");
+      String key = expect(IDENT, "identifier").lexeme;
+      expect(COLON, ":");
+      Object val = parseValue();
+      it.props.put(key, val);
     }
     return it;
   }
@@ -127,21 +149,15 @@ public class JesParser {
     m.name = expect(STRING, "map name").lexeme;
     expect(LBRACE, "'{'");
     while (!match(RBRACE)) {
-      if (peek().type == IDENT) {
-        String word = peek().lexeme;
-        if ("layer".equals(word)) {
-          match(IDENT); // consume 'layer'
-          m.layers.add(parseMapLayer());
-        } else if (match(IDENT)) {
-          String key = prev().lexeme;
-          expect(COLON, ":");
-          Object val = parseValue();
-          m.props.put(key, val);
-        } else {
-          i++;
-        }
+      if (peek().type == EOF) throw error("Unterminated map block");
+      JesToken wordTok = expect(IDENT, "identifier");
+      String word = wordTok.lexeme;
+      if ("layer".equals(word)) {
+        m.layers.add(parseMapLayer());
       } else {
-        i++;
+        expect(COLON, ":");
+        Object val = parseValue();
+        m.props.put(word, val);
       }
     }
     return m;
@@ -152,19 +168,17 @@ public class JesParser {
     l.name = expect(STRING, "layer name").lexeme;
     expect(LBRACE, "'{'");
     while (!match(RBRACE)) {
-      if (match(IDENT)) {
-        String key = prev().lexeme;
-        expect(COLON, ":");
-        Object val = parseValue();
-        l.props.put(key, val);
-      } else {
-        i++;
-      }
+      if (peek().type == EOF) throw error("Unterminated map layer block");
+      String key = expect(IDENT, "identifier").lexeme;
+      expect(COLON, ":");
+      Object val = parseValue();
+      l.props.put(key, val);
     }
     return l;
   }
 
-  private JesAst.TimelineAction parseTimelineAction(String kind) {
+  private JesAst.TimelineAction parseTimelineAction(JesToken kindTok) {
+    String kind = kindTok == null ? null : kindTok.lexeme;
     JesAst.TimelineAction a = new JesAst.TimelineAction();
     a.type = kind;
     switch (kind) {
@@ -178,11 +192,13 @@ public class JesParser {
         if (match(LBRACE)) {
           while (!match(RBRACE)) {
             if (match(IDENT)) {
-              String k = prev().lexeme;
+              JesToken keyTok = prev();
+              String k = keyTok.lexeme;
+              validateTimelineProp(kind, k, keyTok);
               expect(COLON, ":");
               Object v = parseValue();
               a.props.put(k, v);
-            } else { i++; }
+            } else { throw error("Expected property name in call action"); }
           }
         }
       }
@@ -192,45 +208,47 @@ public class JesParser {
         expect(LBRACE, "'{'" );
         while (!match(RBRACE)) {
           if (match(IDENT)) {
-            String k = prev().lexeme;
+            JesToken keyTok = prev();
+            String k = keyTok.lexeme;
+            validateTimelineProp(kind, k, keyTok);
             expect(COLON, ":");
             Object v = parseValue();
             a.props.put(k, v);
-          } else { i++; }
+          } else { throw error("Expected property name in timeline action"); }
         }
       }
       case "cameraMove", "cameraZoom", "cameraShake" -> {
         expect(LBRACE, "'{'" );
         while (!match(RBRACE)) {
           if (match(IDENT)) {
-            String k = prev().lexeme;
+            JesToken keyTok = prev();
+            String k = keyTok.lexeme;
+            validateTimelineProp(kind, k, keyTok);
             expect(COLON, ":");
             Object v = parseValue();
             a.props.put(k, v);
-          } else { i++; }
+          } else { throw error("Expected property name in camera action"); }
         }
       }
-      default -> {}
+      default -> throw error("Unknown timeline action '" + kind + "'", kindTok);
     }
     return a;
   }
 
   private JesAst.InputBinding parseBinding() {
-    // already consumed 'on'
-    expect(IDENT, "key"); // expect 'key'
+    expect(IDENT, "'key'"); // expect 'key'
     String keyName = expect(STRING, "key name").lexeme;
-    expect(IDENT, "do"); // expect 'do'
+    expect(IDENT, "'do'"); // expect 'do'
     String action = expect(IDENT, "action").lexeme;
     JesAst.InputBinding b = new JesAst.InputBinding();
     b.key = keyName; b.action = action;
     if (match(LBRACE)) {
       while (!match(RBRACE)) {
-        if (match(IDENT)) {
-          String k = prev().lexeme;
-          expect(COLON, ":");
-          Object v = parseValue();
-          b.props.put(k, v);
-        } else i++;
+        if (peek().type == EOF) throw error("Unterminated input binding block");
+        String k = expect(IDENT, "identifier").lexeme;
+        expect(COLON, ":");
+        Object v = parseValue();
+        b.props.put(k, v);
       }
     }
     return b;
@@ -241,11 +259,12 @@ public class JesParser {
     e.name = expect(STRING, "entity name").lexeme;
     expect(LBRACE, "'{'");
     while (!match(RBRACE)) {
-      if (match(IDENT) && "component".equals(prev().lexeme)) {
+        if (peek().type == EOF) throw error("Unterminated entity block");
+        JesToken kw = expect(IDENT, "'component'");
+        if (!"component".equals(kw.lexeme)) {
+          throw error("Expected 'component' declaration", kw);
+        }
         e.components.add(parseComponent());
-      } else {
-        i++; // skip
-      }
     }
     return e;
   }
@@ -255,16 +274,34 @@ public class JesParser {
     c.type = expect(IDENT, "component type").lexeme;
     expect(LBRACE, "'{'");
     while (!match(RBRACE)) {
-      if (match(IDENT)) {
-        String key = prev().lexeme;
-        expect(COLON, ":");
-        Object val = parseValue();
-        c.props.put(key, val);
-      } else {
-        i++;
-      }
+      if (peek().type == EOF) throw error("Unterminated component block");
+      String key = expect(IDENT, "identifier").lexeme;
+      validateComponentProp(c.type, key, prev());
+      expect(COLON, ":");
+      Object val = parseValue();
+      c.props.put(key, val);
     }
     return c;
+  }
+
+  private void validateComponentProp(String type, String key, JesToken tok) {
+    if (type == null || key == null) return;
+    if (COMPONENT_FREE_PROPS.contains(type)) return;
+    Set<String> allowed = COMPONENT_PROPS.get(type);
+    if (allowed == null) return; // unknown component type, allow freely
+    if (!allowed.contains(key)) {
+      throw error("Unknown property '" + key + "' for component '" + type + "'", tok);
+    }
+  }
+
+  private void validateTimelineProp(String action, String key, JesToken tok) {
+    if (action == null || key == null) return;
+    if (TIMELINE_FREE_PROPS.contains(action)) return;
+    Set<String> allowed = TIMELINE_PROPS.get(action);
+    if (allowed == null) return;
+    if (!allowed.contains(key)) {
+      throw error("Unknown property '" + key + "' for timeline action '" + action + "'", tok);
+    }
   }
 
   private Object parseValue() {
@@ -290,7 +327,8 @@ public class JesParser {
         return ident;
       }
     }
-    throw error("value expected");
+    JesToken p = peek();
+    throw new JesParseException("Value expected", p.line, p.col);
   }
 
   private double parseNum() {

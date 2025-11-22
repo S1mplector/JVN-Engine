@@ -535,7 +535,7 @@ public class EditorApp extends Application {
     HBox row1 = new HBox(8);
     HBox row2 = new HBox(8);
     row1.getChildren().addAll(btnOpen, btnOpenProject, btnReload, btnApply, btnFit, btnReset, btnRun);
-    row2.getChildren().addAll(btnSave, btnUndo, btnRedo, spacer, fps, status);
+    row2.getChildren().addAll(btnSave, btnUndo, btnRedo, spacer, status);
     VBox toolRows = new VBox(6);
     toolRows.getChildren().addAll(row1, row2);
     HBox.setHgrow(toolRows, Priority.ALWAYS);
@@ -677,11 +677,10 @@ public class EditorApp extends Application {
           ft.setSize(filesTabs.getWidth(), filesTabs.getHeight());
           ft.render(dt);
         }
-        if (fps != null) {
-          double f = (dt > 0) ? (1000.0 / dt) : 0.0;
-          lastFps = f;
-          fps.setText(String.format("%.0f fps", f));
-        }
+    if (fps != null) {
+      double f = (dt > 0) ? (1000.0 / dt) : 0.0;
+      lastFps = f;
+    }
         updatePerf(now);
       }
     };
