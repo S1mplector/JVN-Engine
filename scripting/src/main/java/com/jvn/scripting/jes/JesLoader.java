@@ -17,6 +17,8 @@ import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.core.scene2d.SpriteSheet;
 import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
+import com.jvn.scripting.jes.runtime.Inventory;
+import com.jvn.scripting.jes.runtime.Item;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
 import com.jvn.scripting.jes.runtime.Stats;
@@ -39,6 +41,20 @@ public class JesLoader {
 
   private static JesScene2D buildScene(JesAst.SceneDecl s) {
     JesScene2D scene = new JesScene2D();
+
+    // Build item database
+    Map<String, Item> items = new HashMap<>();
+    for (JesAst.ItemDecl it : s.items) {
+      if (it == null || it.id == null) continue;
+      if (items.containsKey(it.id)) continue;
+      Item item = new Item();
+      item.setId(it.id);
+      item.getProps().putAll(it.props);
+      items.put(it.id, item);
+    }
+    for (Item item : items.values()) {
+      scene.registerItem(item);
+    }
 
     // Build tileset lookup
     Map<String, JesAst.TilesetDecl> tilesets = new HashMap<>();
@@ -282,6 +298,22 @@ public class JesLoader {
             stats.setDeathCall(deathCall);
             stats.setRemoveOnDeath(removeOnDeath);
             scene.setStats(e.name, stats);
+          }
+          case "Inventory" -> {
+            Inventory inv = new Inventory();
+            int slots = (int) num(c, "slots", 0);
+            inv.setSlots(slots);
+            String itemsStr = str(c, "items", null);
+            if (itemsStr != null) {
+              String[] parts = itemsStr.split(",");
+              for (String part : parts) {
+                String id = part.trim();
+                if (!id.isEmpty()) {
+                  inv.add(id, 1);
+                }
+              }
+            }
+            scene.setInventory(e.name, inv);
           }
           default -> {}
         }

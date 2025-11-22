@@ -17,6 +17,7 @@ public class JesAst {
     public final List<TimelineAction> timeline = new ArrayList<>();
     public final List<TilesetDecl> tilesets = new ArrayList<>();
     public final List<MapDecl> maps = new ArrayList<>();
+    public final List<ItemDecl> items = new ArrayList<>();
   }
   public static class EntityDecl {
     public String name;
@@ -47,6 +48,10 @@ public class JesAst {
   }
   public static class MapLayerDecl {
     public String name;
+    public final Map<String,Object> props = new HashMap<>();
+  }
+  public static class ItemDecl {
+    public String id;
     public final Map<String,Object> props = new HashMap<>();
   }
 }

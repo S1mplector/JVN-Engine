@@ -50,6 +50,9 @@ public class JesParser {
         if ("tileset".equals(word)) {
           match(IDENT); // consume 'tileset'
           s.tilesets.add(parseTileset());
+        } else if ("item".equals(word)) {
+          match(IDENT); // consume 'item'
+          s.items.add(parseItem());
         } else if ("map".equals(word)) {
           match(IDENT); // consume 'map'
           s.maps.add(parseMap());
@@ -100,6 +103,23 @@ public class JesParser {
       }
     }
     return t;
+  }
+
+  private JesAst.ItemDecl parseItem() {
+    JesAst.ItemDecl it = new JesAst.ItemDecl();
+    it.id = expect(STRING, "item id").lexeme;
+    expect(LBRACE, "'{'" );
+    while (!match(RBRACE)) {
+      if (match(IDENT)) {
+        String key = prev().lexeme;
+        expect(COLON, ":");
+        Object val = parseValue();
+        it.props.put(key, val);
+      } else {
+        i++;
+      }
+    }
+    return it;
   }
 
   private JesAst.MapDecl parseMap() {

@@ -25,6 +25,8 @@ public class JesScene2D extends Scene2DBase {
   private final List<Binding> bindings = new ArrayList<>();
   private final Map<String, Entity2D> named = new HashMap<>();
   private final Map<String, Stats> statsByEntity = new HashMap<>();
+  private final Map<String, Item> items = new HashMap<>();
+  private final Map<String, Inventory> inventories = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
@@ -89,6 +91,27 @@ public class JesScene2D extends Scene2DBase {
   public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
   public Stats getStats(String name) { return name == null ? null : statsByEntity.get(name); }
   public void setStats(String name, Stats stats) { if (name != null && stats != null) statsByEntity.put(name, stats); }
+  public Item getItem(String id) { return id == null ? null : items.get(id); }
+  public void registerItem(Item item) {
+    if (item == null) return;
+    String id = item.getId();
+    if (id == null || id.isBlank()) return;
+    if (!items.containsKey(id)) items.put(id, item);
+  }
+  public Inventory getInventory(String name) { return name == null ? null : inventories.get(name); }
+  public void setInventory(String name, Inventory inv) { if (name != null && inv != null) inventories.put(name, inv); }
+  public boolean addItemToInventory(String name, String itemId, int count) {
+    if (name == null || name.isBlank()) return false;
+    if (itemId == null || itemId.isBlank()) return false;
+    if (count <= 0) return false;
+    Inventory inv = inventories.get(name);
+    if (inv == null) {
+      inv = new Inventory();
+      inventories.put(name, inv);
+    }
+    inv.add(itemId, count);
+    return true;
+  }
   public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public void invokeCall(String name, Map<String,Object> props) {
@@ -97,6 +120,8 @@ public class JesScene2D extends Scene2DBase {
     // Built-in map warp helper: can be triggered directly from triggers using triggerCall: "warpMap"
     if ("warpMap".equals(name)) {
       warpMap(actualProps);
+    } else if ("useItem".equals(name)) {
+      useItem(actualProps);
     }
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
@@ -407,6 +432,47 @@ public class JesScene2D extends Scene2DBase {
     world.addBody(body);
     PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
     add(vis);
+  }
+
+  private void useItem(Map<String,Object> props) {
+    String user = toStr(props.get("user"), null);
+    String itemId = toStr(props.get("itemId"), null);
+    if (user == null || user.isBlank()) return;
+    if (itemId == null || itemId.isBlank()) return;
+
+    Inventory inv = inventories.get(user);
+    if (inv == null) return;
+    if (!inv.remove(itemId, 1)) return;
+
+    Item item = items.get(itemId);
+    if (item == null) return;
+
+    Map<String,Object> ip = item.getProps();
+
+    double hpRestore = toNum(ip.get("hpRestore"), 0);
+    if (hpRestore > 0) {
+      heal(user, hpRestore, itemId);
+    }
+
+    Stats stats = statsByEntity.get(user);
+    if (stats != null) {
+      double mpRestore = toNum(ip.get("mpRestore"), 0);
+      if (mpRestore > 0) {
+        double currentMp = stats.getMp();
+        double maxMp = stats.getMaxMp();
+        double newMp = currentMp + mpRestore;
+        if (maxMp > 0 && newMp > maxMp) newMp = maxMp;
+        stats.setMp(newMp);
+      }
+    }
+
+    Object onUseCallObj = ip.get("onUseCall");
+    if (onUseCallObj instanceof String onUseCall && !onUseCall.isBlank()) {
+      Map<String,Object> callProps = new HashMap<>();
+      callProps.put("user", user);
+      callProps.put("itemId", itemId);
+      invokeCall(onUseCall, callProps);
+    }
   }
   
   private boolean isBlockedWorld(double x, double y) {
