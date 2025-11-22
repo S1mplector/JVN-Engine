@@ -28,6 +28,7 @@ public class JesScene2D extends Scene2DBase {
   private final Map<String, Item> items = new HashMap<>();
   private final Map<String, Inventory> inventories = new HashMap<>();
   private final Map<String, Equipment> equipmentByEntity = new HashMap<>();
+  private final Map<String, Ai2D> aiByEntity = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
@@ -141,6 +142,11 @@ public class JesScene2D extends Scene2DBase {
     equipmentByEntity.put(name, eq);
     recomputeEquipmentBonuses(name);
   }
+  public Ai2D getAi(String name) { return name == null ? null : aiByEntity.get(name); }
+  public void setAi(String name, Ai2D ai) {
+    if (name == null || name.isBlank() || ai == null) return;
+    aiByEntity.put(name, ai);
+  }
   public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public void invokeCall(String name, Map<String,Object> props) {
@@ -159,6 +165,8 @@ public class JesScene2D extends Scene2DBase {
       handleEquipItem(actualProps);
     } else if ("unequipItem".equals(name)) {
       handleUnequipItem(actualProps);
+    } else if ("attack".equals(name)) {
+      handleAttack(actualProps);
     }
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
@@ -196,6 +204,7 @@ public class JesScene2D extends Scene2DBase {
       }
     }
 
+    updateAi(deltaMs);
     updateTimeline(deltaMs);
   }
 
@@ -742,6 +751,101 @@ public class JesScene2D extends Scene2DBase {
       }
       invokeCall("interactNpc", props);
     }
+  }
+
+  private void updateAi(long deltaMs) {
+    if (aiByEntity.isEmpty()) return;
+    double dt = deltaMs / 1000.0;
+    if (dt <= 0) return;
+    for (Map.Entry<String,Ai2D> entry : aiByEntity.entrySet()) {
+      String name = entry.getKey();
+      Ai2D ai = entry.getValue();
+      if (ai == null) continue;
+      Entity2D e = named.get(name);
+      if (e == null) continue;
+      String type = ai.getType();
+      if (type == null) type = "";
+      String tLower = type.toLowerCase();
+      if ("chase".equals(tLower) || "chasehero".equals(tLower) || "chase_and_attack".equals(tLower)) {
+        updateAiChaseAndAttack(name, e, ai, dt, deltaMs);
+      }
+    }
+  }
+
+  private void updateAiChaseAndAttack(String name, Entity2D e, Ai2D ai, double dt, long deltaMs) {
+    String targetName = ai.getTarget();
+    if (targetName == null || targetName.isBlank()) {
+      targetName = playerName;
+    }
+    if (targetName == null || targetName.isBlank()) return;
+    Entity2D target = named.get(targetName);
+    if (target == null) return;
+
+    double ex = e.getX();
+    double ey = e.getY();
+    double tx = target.getX();
+    double ty = target.getY();
+    double dx = tx - ex;
+    double dy = ty - ey;
+    double dist = Math.hypot(dx, dy);
+
+    double aggroRange = ai.getAggroRange();
+    if (aggroRange > 0 && dist > aggroRange) return;
+
+    double attackRange = ai.getAttackRange();
+    if (attackRange <= 0) attackRange = gridW;
+
+    double cooldown = ai.getAttackCooldownMs() + deltaMs;
+    ai.setAttackCooldownMs(cooldown);
+
+    if (dist <= attackRange) {
+      double interval = ai.getAttackIntervalMs();
+      if (interval <= 0) interval = 1000.0;
+      if (cooldown >= interval) {
+        double amount = ai.getAttackAmount();
+        if (amount <= 0) {
+          Stats s = statsByEntity.get(name);
+          if (s != null) amount = s.getAtk();
+        }
+        if (amount > 0) {
+          applyDamage(targetName, amount, name);
+        }
+        ai.setAttackCooldownMs(0.0);
+      }
+      return;
+    }
+
+    double speed = ai.getMoveSpeed();
+    if (speed <= 0) {
+      Stats s = statsByEntity.get(name);
+      if (s != null) speed = s.getSpeed();
+    }
+    if (speed <= 0) {
+      speed = 80.0;
+    }
+
+    if (dist <= 0) return;
+    double maxStep = speed * dt;
+    if (maxStep <= 0) return;
+    double step = Math.min(maxStep, dist);
+    double nx = ex + dx * (step / dist);
+    double ny = ey + dy * (step / dist);
+    if (isBlockedWorld(nx, ny)) return;
+    e.setPosition(nx, ny);
+  }
+
+  private void handleAttack(Map<String,Object> props) {
+    String attacker = toStr(props.get("attacker"), null);
+    String target = toStr(props.get("target"), null);
+    if (attacker == null || attacker.isBlank()) return;
+    if (target == null || target.isBlank()) return;
+    double amount = toNum(props.get("amount"), Double.NaN);
+    if (Double.isNaN(amount) || amount <= 0) {
+      Stats s = statsByEntity.get(attacker);
+      if (s != null) amount = s.getAtk();
+    }
+    if (amount <= 0) return;
+    applyDamage(target, amount, attacker);
   }
 
   private void warpMap(Map<String,Object> props) {

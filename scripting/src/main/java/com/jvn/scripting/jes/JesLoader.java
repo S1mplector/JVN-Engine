@@ -17,6 +17,7 @@ import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.core.scene2d.SpriteSheet;
 import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
+import com.jvn.scripting.jes.runtime.Ai2D;
 import com.jvn.scripting.jes.runtime.Equipment;
 import com.jvn.scripting.jes.runtime.Inventory;
 import com.jvn.scripting.jes.runtime.Item;
@@ -338,6 +339,24 @@ public class JesLoader {
               eq.set(slot, id);
             }
             scene.setEquipment(e.name, eq);
+          }
+          case "Ai2D" -> {
+            Ai2D ai = new Ai2D();
+            String type = str(c, "type", "chase");
+            String target = str(c, "target", null);
+            double aggroRange = num(c, "aggroRange", 0);
+            double attackRange = num(c, "attackRange", 0);
+            double attackIntervalMs = num(c, "attackIntervalMs", 1000.0);
+            double attackAmount = num(c, "attackAmount", 0);
+            double moveSpeed = num(c, "moveSpeed", 0);
+            ai.setType(type);
+            ai.setTarget(target);
+            ai.setAggroRange(aggroRange);
+            ai.setAttackRange(attackRange);
+            ai.setAttackIntervalMs(attackIntervalMs);
+            ai.setAttackAmount(attackAmount);
+            ai.setMoveSpeed(moveSpeed);
+            scene.setAi(e.name, ai);
           }
           default -> {}
         }
