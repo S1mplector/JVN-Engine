@@ -166,7 +166,7 @@ public class JesParser {
           }
         }
       }
-      case "move", "rotate", "scale", "fade", "visible", "walkToTile" -> {
+      case "move", "rotate", "scale", "fade", "visible", "walkToTile", "damage", "heal" -> {
         String target = expect(STRING, "entity name").lexeme;
         a.target = target;
         expect(LBRACE, "'{'" );

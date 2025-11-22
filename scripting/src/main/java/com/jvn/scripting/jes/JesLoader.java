@@ -19,6 +19,7 @@ import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
+import com.jvn.scripting.jes.runtime.Stats;
 
 public class JesLoader {
   public static JesScene2D load(InputStream in) throws Exception {
@@ -259,6 +260,28 @@ public class JesLoader {
             scene.registerEntity(e.name, ch);
             boolean controllable = bool(c, "controllable", false);
             if (controllable) scene.setPlayerName(e.name);
+          }
+          case "Stats" -> {
+            Stats stats = new Stats();
+            double maxHp = num(c, "maxHp", 0);
+            double hp = num(c, "hp", maxHp);
+            double maxMp = num(c, "maxMp", 0);
+            double mp = num(c, "mp", maxMp);
+            double atk = num(c, "atk", 0);
+            double def = num(c, "def", 0);
+            double speed = num(c, "speed", 0);
+            String deathCall = str(c, "onDeathCall", null);
+            boolean removeOnDeath = bool(c, "removeOnDeath", false);
+            stats.setMaxHp(maxHp);
+            stats.setHp(hp);
+            stats.setMaxMp(maxMp);
+            stats.setMp(mp);
+            stats.setAtk(atk);
+            stats.setDef(def);
+            stats.setSpeed(speed);
+            stats.setDeathCall(deathCall);
+            stats.setRemoveOnDeath(removeOnDeath);
+            scene.setStats(e.name, stats);
           }
           default -> {}
         }

@@ -24,6 +24,7 @@ public class JesScene2D extends Scene2DBase {
   private PhysicsDebugOverlay2D debugOverlay;
   private final List<Binding> bindings = new ArrayList<>();
   private final Map<String, Entity2D> named = new HashMap<>();
+  private final Map<String, Stats> statsByEntity = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
@@ -86,6 +87,8 @@ public class JesScene2D extends Scene2DBase {
   public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
   public java.util.List<Binding> exportBindings() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(bindings)); }
   public java.util.List<JesAst.TimelineAction> exportTimeline() { return java.util.Collections.unmodifiableList(new java.util.ArrayList<>(timeline)); }
+  public Stats getStats(String name) { return name == null ? null : statsByEntity.get(name); }
+  public void setStats(String name, Stats stats) { if (name != null && stats != null) statsByEntity.put(name, stats); }
   public void registerCall(String name, Consumer<Map<String,Object>> handler) { if (name != null && !name.isBlank() && handler != null) callHandlers.put(name, handler); }
   public void setActionHandler(BiConsumer<String, Map<String,Object>> handler) { this.actionHandler = handler; }
   public void invokeCall(String name, Map<String,Object> props) {
@@ -349,6 +352,22 @@ public class JesScene2D extends Scene2DBase {
         tlIndex++;
         tlElapsedMs = 0;
       }
+      case "damage" -> {
+        String targetName = a.target;
+        double amt = toNum(a.props.get("amount"), 0);
+        String source = toStr(a.props.get("source"), null);
+        applyDamage(targetName, amt, source);
+        tlIndex++;
+        tlElapsedMs = 0;
+      }
+      case "heal" -> {
+        String targetName = a.target;
+        double amt = toNum(a.props.get("amount"), 0);
+        String source = toStr(a.props.get("source"), null);
+        heal(targetName, amt, source);
+        tlIndex++;
+        tlElapsedMs = 0;
+      }
       default -> { tlIndex++; tlElapsedMs = 0; }
     }
   }
@@ -548,6 +567,45 @@ public class JesScene2D extends Scene2DBase {
     world.addBody(body);
     PhysicsBodyEntity2D vis = new PhysicsBodyEntity2D(body);
     add(vis);
+  }
+
+  public void applyDamage(String name, double amount, String source) {
+    if (name == null) return;
+    if (amount <= 0) return;
+    Stats stats = statsByEntity.get(name);
+    if (stats == null) return;
+    double currentHp = stats.getHp();
+    double maxHp = stats.getMaxHp();
+    double newHp = currentHp - amount;
+    if (maxHp > 0 && newHp < 0) newHp = 0;
+    stats.setHp(newHp);
+    if (stats.isDead()) {
+      String deathCall = stats.getDeathCall();
+      if (deathCall != null && !deathCall.isBlank()) {
+        Map<String,Object> props = new HashMap<>();
+        props.put("entity", name);
+        if (source != null && !source.isBlank()) {
+          props.put("source", source);
+        }
+        invokeCall(deathCall, props);
+      }
+      if (stats.isRemoveOnDeath()) {
+        removeEntity(name);
+        statsByEntity.remove(name);
+      }
+    }
+  }
+
+  public void heal(String name, double amount, String source) {
+    if (name == null) return;
+    if (amount <= 0) return;
+    Stats stats = statsByEntity.get(name);
+    if (stats == null) return;
+    double currentHp = stats.getHp();
+    double maxHp = stats.getMaxHp();
+    double newHp = currentHp + amount;
+    if (maxHp > 0 && newHp > maxHp) newHp = maxHp;
+    stats.setHp(newHp);
   }
 
   private static double toNum(Object o, double def) {
