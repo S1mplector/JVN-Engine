@@ -24,6 +24,8 @@ import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -53,6 +55,8 @@ public class TilemapEditorView extends BorderPane {
   private int[][] tiles;
   private int selectedIndex = 0;
   private double cellSize = 24.0;
+
+  private double gridScale = 1.0;
 
   private JesAst.TilesetDecl currentTileset;
   private Image tilesetImage;
@@ -88,18 +92,30 @@ public class TilemapEditorView extends BorderPane {
     Button saveButton = new Button("Save Layer");
     saveButton.setOnAction(e -> saveLayer());
 
+    Button gridZoomIn = new Button("Grid+");
+    gridZoomIn.setOnAction(e -> zoomGrid(1.25));
+    Button gridZoomOut = new Button("Grid-");
+    gridZoomOut.setOnAction(e -> zoomGrid(1.0 / 1.25));
+
+    Button tilesetZoomIn = new Button("Tileset+");
+    tilesetZoomIn.setOnAction(e -> zoomTileset(1.25));
+    Button tilesetZoomOut = new Button("Tileset-");
+    tilesetZoomOut.setOnAction(e -> zoomTileset(1.0 / 1.25));
+
     statusLabel = new Label("No JES context");
 
     HBox tools = new HBox(8,
       new Label("Map:"), mapBox,
       new Label("Layer:"), layerBox,
       new Label("Tile:"), indexSpinner,
+      gridZoomOut, gridZoomIn,
+      tilesetZoomOut, tilesetZoomIn,
       reloadButton, saveButton, statusLabel);
     tools.setPadding(new Insets(4));
 
     canvas = new Canvas(400, 300);
-    canvas.setOnMousePressed(e -> handlePaint(e.getX(), e.getY()));
-    canvas.setOnMouseDragged(e -> handlePaint(e.getX(), e.getY()));
+    canvas.setOnMousePressed(this::handlePaint);
+    canvas.setOnMouseDragged(this::handlePaint);
     Tooltip.install(canvas, new Tooltip("Click or drag to paint tiles"));
 
     scroll = new ScrollPane(canvas);
@@ -422,12 +438,24 @@ public class TilemapEditorView extends BorderPane {
     redrawTileset();
   }
 
-  private void handlePaint(double px, double py) {
+  private void handlePaint(MouseEvent e) {
     if (tiles == null) return;
-    int tx = (int) (px / cellSize);
-    int ty = (int) (py / cellSize);
+    double step = cellSize * gridScale;
+    if (step <= 0) return;
+    double px = e.getX();
+    double py = e.getY();
+    int tx = (int) (px / step);
+    int ty = (int) (py / step);
     if (ty < 0 || ty >= rows || tx < 0 || tx >= cols) return;
-    tiles[ty][tx] = selectedIndex;
+    boolean erase = e.isSecondaryButtonDown() || e.getButton() == MouseButton.SECONDARY;
+    boolean paint = e.isPrimaryButtonDown() || e.getButton() == MouseButton.PRIMARY;
+    if (erase) {
+      tiles[ty][tx] = -1;
+    } else if (paint) {
+      tiles[ty][tx] = selectedIndex;
+    } else {
+      return;
+    }
     redraw();
   }
 
@@ -442,14 +470,15 @@ public class TilemapEditorView extends BorderPane {
       g.fillText("No map layer", 16, 24);
       return;
     }
-    canvas.setWidth(cols * cellSize);
-    canvas.setHeight(rows * cellSize);
+    double step = cellSize * gridScale;
+    canvas.setWidth(cols * step);
+    canvas.setHeight(rows * step);
     g.setFill(Color.color(0.06, 0.06, 0.08));
     g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
-        double sx = x * cellSize;
-        double sy = y * cellSize;
+        double sx = x * step;
+        double sy = y * step;
         int v = tiles[y][x];
         if (v >= 0) {
           double hue = (v * 37) % 360;
@@ -458,11 +487,18 @@ public class TilemapEditorView extends BorderPane {
         } else {
           g.setFill(Color.color(0.12, 0.12, 0.16));
         }
-        g.fillRect(sx, sy, cellSize, cellSize);
+        g.fillRect(sx, sy, step, step);
         g.setStroke(Color.color(0.2, 0.2, 0.25));
-        g.strokeRect(sx, sy, cellSize, cellSize);
+        g.strokeRect(sx, sy, step, step);
       }
     }
+  }
+
+  private void zoomGrid(double factor) {
+    gridScale *= factor;
+    if (gridScale < 0.25) gridScale = 0.25;
+    if (gridScale > 4.0) gridScale = 4.0;
+    redraw();
   }
 
   private void redrawTileset() {
@@ -499,5 +535,12 @@ public class TilemapEditorView extends BorderPane {
       g.setLineWidth(2.0);
       g.strokeRect(hx + 1, hy + 1, stepX - 2, stepY - 2);
     }
+  }
+
+  private void zoomTileset(double factor) {
+    tilesetScale *= factor;
+    if (tilesetScale < 0.5) tilesetScale = 0.5;
+    if (tilesetScale > 8.0) tilesetScale = 8.0;
+    redrawTileset();
   }
 }

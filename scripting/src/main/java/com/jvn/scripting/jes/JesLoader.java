@@ -45,15 +45,16 @@ public class JesLoader {
       if (t != null && t.name != null) tilesets.put(t.name, t);
     }
 
-    // Build tilemap layers from the first map, if any, and expose tile size
+    // Build tilemap layers from all maps, and expose grid size from the first
     final double[] mapTileW = new double[]{1.0};
     final double[] mapTileH = new double[]{1.0};
     final boolean[] hasMapInfo = new boolean[]{false};
     if (!s.maps.isEmpty() && !tilesets.isEmpty()) {
-      JesAst.MapDecl m = s.maps.get(0);
-      String tilesetName = str(m.props, "tileset", null);
-      JesAst.TilesetDecl ts = tilesets.get(tilesetName);
-      if (ts != null) {
+      for (JesAst.MapDecl m : s.maps) {
+        if (m == null) continue;
+        String tilesetName = str(m.props, "tileset", null);
+        JesAst.TilesetDecl ts = tilesets.get(tilesetName);
+        if (ts == null) continue;
         String image = str(ts.props, "image", null);
         int tileW = (int) num(ts.props, "tileW", 16);
         int tileH = (int) num(ts.props, "tileH", 16);
@@ -64,11 +65,16 @@ public class JesLoader {
         int mapRows = (int) num(m.props, "height", 10);
         double drawTileW = num(m.props, "tileW", tileW);
         double drawTileH = num(m.props, "tileH", tileH);
-        mapTileW[0] = drawTileW;
-        mapTileH[0] = drawTileH;
-        hasMapInfo[0] = true;
+
+        // Use the first valid map/tileset to define grid size for character placement and movement
+        if (!hasMapInfo[0]) {
+          mapTileW[0] = drawTileW;
+          mapTileH[0] = drawTileH;
+          hasMapInfo[0] = true;
+        }
 
         for (JesAst.MapLayerDecl l : m.layers) {
+          if (l == null) continue;
           TileMap2D tilemap = new TileMap2D(sheet, mapCols, mapRows, drawTileW, drawTileH);
           String dataPath = str(l.props, "data", null);
           loadLayerIntoTilemap(tilemap, dataPath);
