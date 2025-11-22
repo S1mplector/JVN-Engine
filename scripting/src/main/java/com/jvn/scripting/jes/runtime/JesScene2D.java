@@ -47,9 +47,12 @@ public class JesScene2D extends Scene2DBase {
   private String playerFacing = "down";
   private final List<TileMap2D> collisionTilemaps = new ArrayList<>();
   private boolean continuousMovementEnabled = false;
-  private final List<UiButton2D> buttons = new ArrayList<>();
+  private final List<Button2D> buttons = new ArrayList<>();
+  private final List<Slider2D> sliders = new ArrayList<>();
   private String cameraFollowTarget;
   private double cameraFollowLerp = 0.2;
+  private double cameraDeadZoneW = 0;
+  private double cameraDeadZoneH = 0;
   private final List<RunningAsyncAction> asyncActions = new ArrayList<>();
   private double heroVx;
   private double heroVy;
@@ -198,6 +201,8 @@ public class JesScene2D extends Scene2DBase {
     equipmentByEntity.put(name, eq);
     recomputeEquipmentBonuses(name);
   }
+  public void addButton(Button2D btn) { if (btn != null) buttons.add(btn); }
+  public void addSlider(Slider2D s) { if (s != null) sliders.add(s); }
   public Ai2D getAi(String name) { return name == null ? null : aiByEntity.get(name); }
   public void setAi(String name, Ai2D ai) {
     if (name == null || name.isBlank() || ai == null) return;
@@ -243,6 +248,7 @@ public class JesScene2D extends Scene2DBase {
     this.cameraFollowTarget = target;
     if (lerp > 0) this.cameraFollowLerp = lerp;
   }
+  public void setCameraDeadZone(double w, double h) { this.cameraDeadZoneW = Math.max(0, w); this.cameraDeadZoneH = Math.max(0, h); }
   public void setPaused(boolean paused) { this.paused = paused; }
   public boolean isPaused() { return paused; }
   public boolean rename(String oldName, String newName) {
@@ -273,6 +279,7 @@ public class JesScene2D extends Scene2DBase {
       }
       updateContinuousMovement(in, deltaMs);
       handleButtons(in);
+      handleSliders(in);
     }
 
     updateAi(deltaMs);
@@ -513,6 +520,8 @@ public class JesScene2D extends Scene2DBase {
         cameraFollowLerp = toNum(a.props.get("lerp"), cameraFollowLerp);
         cameraOffsetX = toNum(a.props.get("offsetX"), cameraOffsetX);
         cameraOffsetY = toNum(a.props.get("offsetY"), cameraOffsetY);
+        cameraDeadZoneW = toNum(a.props.get("deadZoneW"), cameraDeadZoneW);
+        cameraDeadZoneH = toNum(a.props.get("deadZoneH"), cameraDeadZoneH);
         return true;
       }
       case "setParallax" -> {
@@ -908,7 +917,18 @@ public class JesScene2D extends Scene2DBase {
     double nx = e.getX() + heroVx * dt;
     double ny = e.getY() + heroVy * dt;
     if (isBlockedWorld(nx, ny)) {
-      heroVx = 0; heroVy = 0;
+      // try sliding along axes
+      double nxX = e.getX() + heroVx * dt;
+      double nyY = e.getY() + heroVy * dt;
+      if (!isBlockedWorld(nxX, e.getY())) {
+        e.setPosition(nxX, e.getY());
+        heroVy = 0;
+      } else if (!isBlockedWorld(e.getX(), nyY)) {
+        e.setPosition(e.getX(), nyY);
+        heroVx = 0;
+      } else {
+        heroVx = 0; heroVy = 0;
+      }
       return;
     }
     e.setPosition(nx, ny);
@@ -1284,21 +1304,56 @@ public class JesScene2D extends Scene2DBase {
 
   private void handleButtons(Input in) {
     if (buttons.isEmpty() || in == null) return;
-    if (!in.wasMousePressed(0)) return;
     double mx = in.getMouseX();
     double my = in.getMouseY();
-    for (UiButton2D btn : buttons) {
+    boolean mouseDown = in.isMouseDown(0);
+    boolean mousePressed = in.wasMousePressed(0);
+    for (Button2D btn : buttons) {
       if (btn == null || !btn.isVisible()) continue;
       double bx = btn.getX();
       double by = btn.getY();
       double bw = btn.getWidth();
       double bh = btn.getHeight();
-      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+      boolean hit = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
+      btn.setHovered(hit);
+      btn.setDown(hit && mouseDown);
+      if (hit && mousePressed) {
         String call = btn.getCall();
         if (call != null && !call.isBlank()) {
           Map<String,Object> props = new HashMap<>(btn.getProps());
           props.put("x", mx); props.put("y", my);
+          props.put("value", 1.0);
           invokeCall(call, props);
+        }
+      }
+    }
+  }
+
+  private void handleSliders(Input in) {
+    if (sliders.isEmpty() || in == null) return;
+    double mx = in.getMouseX();
+    double my = in.getMouseY();
+    boolean mouseDown = in.isMouseDown(0);
+    boolean mousePressed = in.wasMousePressed(0);
+    for (Slider2D sl : sliders) {
+      if (sl == null || !sl.isVisible()) continue;
+      double sx = sl.getX();
+      double sy = sl.getY();
+      double sw = sl.getWidth();
+      double sh = sl.getHeight();
+      boolean hit = mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh;
+      if (mousePressed && hit) sl.setDragging(true);
+      if (!mouseDown) sl.setDragging(false);
+      if (sl.isDragging() && mouseDown) {
+        double old = sl.getValue();
+        sl.setFromPixel(mx - sx);
+        if (Math.abs(sl.getValue() - old) > 1e-6) {
+          String call = sl.getCall();
+          if (call != null && !call.isBlank()) {
+            Map<String,Object> props = new HashMap<>(sl.getProps());
+            props.put("value", sl.getValue());
+            invokeCall(call, props);
+          }
         }
       }
     }
@@ -1337,8 +1392,24 @@ public class JesScene2D extends Scene2DBase {
     double p = Math.max(0.0, Math.min(1.0, lerp));
     double targetX = t.getX() + cameraOffsetX;
     double targetY = t.getY() + cameraOffsetY;
-    double nx = cam.getX() + (targetX - cam.getX()) * p;
-    double ny = cam.getY() + (targetY - cam.getY()) * p;
+    double nx = cam.getX();
+    double ny = cam.getY();
+    if (cameraDeadZoneW > 0) {
+      double left = cam.getX() - cameraDeadZoneW * 0.5;
+      double right = cam.getX() + cameraDeadZoneW * 0.5;
+      if (targetX < left) nx = targetX + cameraDeadZoneW * 0.5;
+      else if (targetX > right) nx = targetX - cameraDeadZoneW * 0.5;
+    } else {
+      nx = cam.getX() + (targetX - cam.getX()) * p;
+    }
+    if (cameraDeadZoneH > 0) {
+      double top = cam.getY() - cameraDeadZoneH * 0.5;
+      double bottom = cam.getY() + cameraDeadZoneH * 0.5;
+      if (targetY < top) ny = targetY + cameraDeadZoneH * 0.5;
+      else if (targetY > bottom) ny = targetY - cameraDeadZoneH * 0.5;
+    } else {
+      ny = cam.getY() + (targetY - cam.getY()) * p;
+    }
     cam.setPosition(nx, ny);
   }
 

@@ -44,6 +44,7 @@
 .error-line {
   -fx-background-color: rgba(243, 139, 168, 0.1);
 }
+.lineno-error { -fx-background-color: #311118; }
 
 .lint-label {
   -fx-padding: 4 8 4 8;

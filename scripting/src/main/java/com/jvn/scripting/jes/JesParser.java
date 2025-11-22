@@ -30,7 +30,9 @@ public class JesParser {
     Map.entry("Character2D", Set.of("spriteSheet", "frameW", "frameH", "cols", "drawW", "drawH", "x", "y", "startTileX", "startTileY", "speed", "originX", "originY", "animations", "startAnim", "dialogueId", "z", "controllable")),
     Map.entry("Stats", Set.of("maxHp", "hp", "maxMp", "mp", "atk", "def", "speed", "onDeathCall", "removeOnDeath")),
     Map.entry("Inventory", Set.of("slots", "items")),
-    Map.entry("Ai2D", Set.of("type", "target", "aggroRange", "attackRange", "attackIntervalMs", "attackAmount", "moveSpeed", "attackCooldownMs", "patrolRadius", "patrolIntervalMs", "requiresLineOfSight", "guardRadius", "fleeDistance"))
+    Map.entry("Ai2D", Set.of("type", "target", "aggroRange", "attackRange", "attackIntervalMs", "attackAmount", "moveSpeed", "attackCooldownMs", "patrolRadius", "patrolIntervalMs", "requiresLineOfSight", "guardRadius", "fleeDistance")),
+    Map.entry("Button2D", Set.of("x", "y", "w", "h", "text", "call", "normal", "hover", "pressed", "textColor", "fontSize")),
+    Map.entry("Slider2D", Set.of("x", "y", "w", "h", "min", "max", "value", "call", "trackColor", "fillColor", "knobColor"))
   );
   private static final Set<String> COMPONENT_FREE_PROPS = Set.of("Equipment");
 
@@ -50,7 +52,7 @@ public class JesParser {
     Map.entry("playAudio", Set.of("id", "volume", "loop", "bgm")),
     Map.entry("stopAudio", Set.of("id")),
     Map.entry("emitParticles", Set.of("count")),
-    Map.entry("cameraFollow", Set.of("target", "lerp", "offsetX", "offsetY")),
+    Map.entry("cameraFollow", Set.of("target", "lerp", "offsetX", "offsetY", "deadZoneW", "deadZoneH")),
     Map.entry("setParallax", Set.of("px", "py")),
     Map.entry("loop", Set.of("count", "until")),
     Map.entry("parallel", Set.of()),

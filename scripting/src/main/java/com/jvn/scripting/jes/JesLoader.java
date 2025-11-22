@@ -17,12 +17,14 @@ import com.jvn.core.scene2d.Sprite2D;
 import com.jvn.core.scene2d.SpriteSheet;
 import com.jvn.core.scene2d.TileMap2D;
 import com.jvn.scripting.jes.ast.JesAst;
+import com.jvn.scripting.jes.runtime.Button2D;
 import com.jvn.scripting.jes.runtime.Ai2D;
 import com.jvn.scripting.jes.runtime.Equipment;
 import com.jvn.scripting.jes.runtime.Inventory;
 import com.jvn.scripting.jes.runtime.Item;
 import com.jvn.scripting.jes.runtime.JesScene2D;
 import com.jvn.scripting.jes.runtime.PhysicsBodyEntity2D;
+import com.jvn.scripting.jes.runtime.Slider2D;
 import com.jvn.scripting.jes.runtime.Stats;
 
 public class JesLoader {
@@ -368,6 +370,44 @@ public class JesLoader {
             ai.setFleeDistance(fleeDistance);
             scene.setAi(e.name, ai);
           }
+          case "Button2D" -> {
+            double x = num(c, "x", 0);
+            double y = num(c, "y", 0);
+            double w = num(c, "w", 100);
+            double h = num(c, "h", 32);
+            Button2D btn = new Button2D(w, h);
+            btn.setPosition(x, y);
+            btn.setText(str(c, "text", ""));
+            btn.setCall(str(c, "call", null));
+            Object normal = c.props.get("normal");
+            Object hover = c.props.get("hover");
+            Object pressed = c.props.get("pressed");
+            Object textColor = c.props.get("textColor");
+            btn.setColors(toColor(normal), toColor(hover), toColor(pressed), toColor(textColor));
+            double fs = num(c, "fontSize", 14);
+            btn.setFontSize(fs);
+            scene.add(btn);
+            scene.registerEntity(e.name, btn);
+            scene.addButton(btn);
+          }
+          case "Slider2D" -> {
+            double x = num(c, "x", 0);
+            double y = num(c, "y", 0);
+            double w = num(c, "w", 120);
+            double h = num(c, "h", 20);
+            Slider2D sl = new Slider2D(w, h);
+            sl.setPosition(x, y);
+            sl.setRange(num(c, "min", 0), num(c, "max", 1));
+            sl.setValue(num(c, "value", 0));
+            sl.setCall(str(c, "call", null));
+            Object track = c.props.get("trackColor");
+            Object fill = c.props.get("fillColor");
+            Object knob = c.props.get("knobColor");
+            sl.setColors(toColor(track), toColor(fill), toColor(knob));
+            scene.add(sl);
+            scene.registerEntity(e.name, sl);
+            scene.addSlider(sl);
+          }
           default -> {}
         }
       });
@@ -402,6 +442,10 @@ public class JesLoader {
   private static boolean bool(Map<String,Object> props, String key, boolean def) {
     Object v = props.get(key);
     return v instanceof Boolean b ? b : def;
+  }
+  private static double[] toColor(Object o) {
+    if (o instanceof double[] arr && arr.length >= 4) return arr;
+    return null;
   }
 
   private static void loadLayerIntoTilemap(TileMap2D tm, String path) {

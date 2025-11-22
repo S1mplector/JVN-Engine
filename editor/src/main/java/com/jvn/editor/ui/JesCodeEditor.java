@@ -29,6 +29,8 @@ public class JesCodeEditor extends BorderPane {
   private File projectRoot;
   private final Label lintLabel = new Label();
   private int lastErrorLine = -1;
+  private final List<String> cachedEntities = new ArrayList<>();
+  private final List<String> cachedLabels = new ArrayList<>();
 
   private static final String[] KEYWORDS = new String[] {
     "scene","entity","component","on","key","do","timeline",
@@ -55,10 +57,16 @@ public class JesCodeEditor extends BorderPane {
   );
 
   public JesCodeEditor() {
-    codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+    codeArea.setParagraphGraphicFactory(line -> {
+      Label ln = new Label(String.format("%d", line + 1));
+      ln.getStyleClass().add("lineno");
+      if (line == lastErrorLine) ln.getStyleClass().add("lineno-error");
+      return ln;
+    });
     codeArea.textProperty().addListener((obs, oldText, newText) -> {
       applyHighlighting(newText);
       lint(newText);
+      cacheNames(newText);
     });
     applyHighlighting("");
     lint("");
@@ -115,15 +123,17 @@ public class JesCodeEditor extends BorderPane {
     // keywords
     for (String kw : KEYWORDS) if (kw.startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(kw));
     // components and timeline actions
-    for (String comp : List.of("Panel2D","Sprite2D","Label2D","ParticleEmitter2D","PhysicsBody2D","Character2D","Stats","Inventory","Equipment","Ai2D","Button2D")) {
+    for (String comp : List.of("Panel2D","Sprite2D","Label2D","ParticleEmitter2D","PhysicsBody2D","Character2D","Stats","Inventory","Equipment","Ai2D","Button2D","Slider2D")) {
       if (comp.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(comp));
     }
-    for (String act : List.of("move","rotate","scale","fade","visible","walkToTile","cameraMove","cameraZoom","cameraShake","damage","heal","call","loop")) {
+    for (String act : List.of("move","rotate","scale","fade","visible","walkToTile","cameraMove","cameraZoom","cameraShake","damage","heal","call","loop","parallel","waitForCall","emitParticles","cameraFollow","setParallax","playAudio","stopAudio","label","jump")) {
       if (act.startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(act));
     }
     for (String builtAction : List.of("toggleDebug","spawnCircle","spawnBox","moveHero","interact","attack")) {
       if (builtAction.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(builtAction));
     }
+    for (String name : cachedEntities) if (name.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(name));
+    for (String lab : cachedLabels) if (lab.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(lab));
     // if inside quotes and line hints an image value, suggest asset ids
     String line = currentLine(ctx.text, ctx.caret).toLowerCase();
     boolean wantsImage = line.contains("image") || line.contains("texture");
@@ -169,12 +179,34 @@ public class JesCodeEditor extends BorderPane {
       } else {
         lastErrorLine = -1;
       }
+      codeArea.setParagraphGraphicFactory(line -> {
+        Label ln = new Label(String.format("%d", line + 1));
+        ln.getStyleClass().add("lineno");
+        if (line == lastErrorLine) ln.getStyleClass().add("lineno-error");
+        return ln;
+      });
     });
   }
 
   private void clearErrorLine() {
     if (lastErrorLine >= 0 && lastErrorLine < codeArea.getParagraphs().size()) {
       codeArea.setParagraphStyle(lastErrorLine, Collections.emptyList());
+    }
+  }
+
+  private void cacheNames(String text) {
+    cachedEntities.clear();
+    cachedLabels.clear();
+    if (text == null) return;
+    Matcher ent = Pattern.compile("entity\\s+\"([^\"]+)\"").matcher(text);
+    while (ent.find()) {
+      String name = ent.group(1);
+      if (name != null && !name.isBlank()) cachedEntities.add(name);
+    }
+    Matcher lab = Pattern.compile("label\\s+\"([^\"]+)\"").matcher(text);
+    while (lab.find()) {
+      String name = lab.group(1);
+      if (name != null && !name.isBlank()) cachedLabels.add(name);
     }
   }
 
