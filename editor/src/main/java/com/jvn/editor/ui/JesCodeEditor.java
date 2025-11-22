@@ -14,11 +14,21 @@ import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.File;
+import javafx.application.Platform;
+import javafx.scene.control.Label;
+import javafx.scene.layout.VBox;
+
+import com.jvn.scripting.jes.JesParseException;
+import com.jvn.scripting.jes.JesParser;
+import com.jvn.scripting.jes.JesToken;
+import com.jvn.scripting.jes.JesTokenizer;
 
 public class JesCodeEditor extends BorderPane {
   private final CodeArea codeArea = new CodeArea();
   private CodeAutoCompleter completer;
   private File projectRoot;
+  private final Label lintLabel = new Label();
+  private int lastErrorLine = -1;
 
   private static final String[] KEYWORDS = new String[] {
     "scene","entity","component","on","key","do","timeline",
@@ -46,11 +56,18 @@ public class JesCodeEditor extends BorderPane {
 
   public JesCodeEditor() {
     codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-    codeArea.textProperty().addListener((obs, oldText, newText) -> applyHighlighting(newText));
+    codeArea.textProperty().addListener((obs, oldText, newText) -> {
+      applyHighlighting(newText);
+      lint(newText);
+    });
     applyHighlighting("");
+    lint("");
 
     VirtualizedScrollPane<CodeArea> sp = new VirtualizedScrollPane<>(codeArea);
-    setCenter(sp);
+    VBox wrapper = new VBox(sp, lintLabel);
+    lintLabel.getStyleClass().add("lint-label");
+    lintLabel.setText("Ready");
+    setCenter(wrapper);
 
     var css = JesCodeEditor.class.getResource("/com/jvn/editor/editor.css");
     if (css != null) {
@@ -64,6 +81,7 @@ public class JesCodeEditor extends BorderPane {
   public String getText() { return codeArea.getText(); }
   public void setText(String s) { codeArea.replaceText(s == null ? "" : s); }
   public void setProjectRoot(File root) { this.projectRoot = root; if (completer != null) completer.setProjectRoot(root); }
+  public void setTextNoEvent(String s) { codeArea.replaceText(s == null ? "" : s); }
 
   private void applyHighlighting(String text) {
     codeArea.setStyleSpans(0, computeHighlighting(text == null ? "" : text));
@@ -96,6 +114,16 @@ public class JesCodeEditor extends BorderPane {
     List<CodeAutoCompleter.Suggestion> out = new ArrayList<>();
     // keywords
     for (String kw : KEYWORDS) if (kw.startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(kw));
+    // components and timeline actions
+    for (String comp : List.of("Panel2D","Sprite2D","Label2D","ParticleEmitter2D","PhysicsBody2D","Character2D","Stats","Inventory","Equipment","Ai2D","Button2D")) {
+      if (comp.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(comp));
+    }
+    for (String act : List.of("move","rotate","scale","fade","visible","walkToTile","cameraMove","cameraZoom","cameraShake","damage","heal","call","loop")) {
+      if (act.startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(act));
+    }
+    for (String builtAction : List.of("toggleDebug","spawnCircle","spawnBox","moveHero","interact","attack")) {
+      if (builtAction.toLowerCase().startsWith(pl)) out.add(new CodeAutoCompleter.Suggestion(builtAction));
+    }
     // if inside quotes and line hints an image value, suggest asset ids
     String line = currentLine(ctx.text, ctx.caret).toLowerCase();
     boolean wantsImage = line.contains("image") || line.contains("texture");
@@ -113,6 +141,41 @@ public class JesCodeEditor extends BorderPane {
       out.removeIf(sug -> { String k = sug.insert; if (seen.contains(k)) return true; seen.add(k); return false; });
     }
     return out;
+  }
+
+  private void lint(String text) {
+    // Basic synchronous lint; fast enough for small scripts
+    if (text == null) text = "";
+    try {
+      List<JesToken> toks = new JesTokenizer(text).tokenize();
+      new JesParser(toks).parseProgram();
+      showLintMessage("No errors", -1);
+    } catch (JesParseException ex) {
+      showLintMessage(ex.getMessage(), ex.getLine());
+    } catch (Exception ex) {
+      showLintMessage("Error: " + ex.getMessage(), -1);
+    }
+  }
+
+  private void showLintMessage(String msg, int errLine) {
+    Platform.runLater(() -> {
+      lintLabel.setText(msg == null ? "" : msg);
+      clearErrorLine();
+      if (errLine > 0) {
+        lastErrorLine = errLine - 1; // CodeArea is 0-based
+        if (lastErrorLine >= 0 && lastErrorLine < codeArea.getParagraphs().size()) {
+          codeArea.setParagraphStyle(lastErrorLine, Collections.singleton("error-line"));
+        }
+      } else {
+        lastErrorLine = -1;
+      }
+    });
+  }
+
+  private void clearErrorLine() {
+    if (lastErrorLine >= 0 && lastErrorLine < codeArea.getParagraphs().size()) {
+      codeArea.setParagraphStyle(lastErrorLine, Collections.emptyList());
+    }
   }
 
   private static String currentLine(String text, int caret) {

@@ -349,6 +349,11 @@ public class JesLoader {
             double attackIntervalMs = num(c, "attackIntervalMs", 1000.0);
             double attackAmount = num(c, "attackAmount", 0);
             double moveSpeed = num(c, "moveSpeed", 0);
+            double patrolRadius = num(c, "patrolRadius", 0);
+            double patrolIntervalMs = num(c, "patrolIntervalMs", 1500.0);
+            boolean requiresLos = bool(c, "requiresLineOfSight", false);
+            double guardRadius = num(c, "guardRadius", 0);
+            double fleeDistance = num(c, "fleeDistance", 0);
             ai.setType(type);
             ai.setTarget(target);
             ai.setAggroRange(aggroRange);
@@ -356,6 +361,11 @@ public class JesLoader {
             ai.setAttackIntervalMs(attackIntervalMs);
             ai.setAttackAmount(attackAmount);
             ai.setMoveSpeed(moveSpeed);
+            ai.setPatrolRadius(patrolRadius);
+            ai.setPatrolIntervalMs(patrolIntervalMs);
+            ai.setRequiresLineOfSight(requiresLos);
+            ai.setGuardRadius(guardRadius);
+            ai.setFleeDistance(fleeDistance);
             scene.setAi(e.name, ai);
           }
           default -> {}

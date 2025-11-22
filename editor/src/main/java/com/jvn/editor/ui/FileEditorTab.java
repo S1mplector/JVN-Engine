@@ -180,7 +180,12 @@ public class FileEditorTab extends BorderPane {
     if (kind == Kind.JES) {
       String code = jesEditor.getText();
       if (code == null || code.isBlank()) return;
-      jesScene = JesLoader.load(code);
+      try {
+        jesScene = JesLoader.load(code);
+      } catch (com.jvn.scripting.jes.JesParseException ex) {
+        if (onStatus != null) onStatus.accept("JES error: " + ex.getMessage());
+        return;
+      }
       if (jesScene != null && viewport != null) {
         jesScene.setInput(viewport.getInput());
         jesScene.setCamera(viewport.getCamera());

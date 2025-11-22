@@ -30,7 +30,7 @@ public class JesParser {
     Map.entry("Character2D", Set.of("spriteSheet", "frameW", "frameH", "cols", "drawW", "drawH", "x", "y", "startTileX", "startTileY", "speed", "originX", "originY", "animations", "startAnim", "dialogueId", "z", "controllable")),
     Map.entry("Stats", Set.of("maxHp", "hp", "maxMp", "mp", "atk", "def", "speed", "onDeathCall", "removeOnDeath")),
     Map.entry("Inventory", Set.of("slots", "items")),
-    Map.entry("Ai2D", Set.of("type", "target", "aggroRange", "attackRange", "attackIntervalMs", "attackAmount", "moveSpeed", "attackCooldownMs"))
+    Map.entry("Ai2D", Set.of("type", "target", "aggroRange", "attackRange", "attackIntervalMs", "attackAmount", "moveSpeed", "attackCooldownMs", "patrolRadius", "patrolIntervalMs", "requiresLineOfSight", "guardRadius", "fleeDistance"))
   );
   private static final Set<String> COMPONENT_FREE_PROPS = Set.of("Equipment");
 
@@ -45,7 +45,17 @@ public class JesParser {
     Map.entry("cameraZoom", Set.of("zoom", "dur", "easing")),
     Map.entry("cameraShake", Set.of("ampX", "ampY", "dur")),
     Map.entry("damage", Set.of("amount", "source")),
-    Map.entry("heal", Set.of("amount", "source"))
+    Map.entry("heal", Set.of("amount", "source")),
+    Map.entry("waitForCall", Set.of("name")),
+    Map.entry("playAudio", Set.of("id", "volume", "loop", "bgm")),
+    Map.entry("stopAudio", Set.of("id")),
+    Map.entry("emitParticles", Set.of("count")),
+    Map.entry("cameraFollow", Set.of("target", "lerp", "offsetX", "offsetY")),
+    Map.entry("setParallax", Set.of("px", "py")),
+    Map.entry("loop", Set.of("count", "until")),
+    Map.entry("parallel", Set.of()),
+    Map.entry("label", Set.of("name")),
+    Map.entry("jump", Set.of("target"))
   );
   private static final Set<String> TIMELINE_FREE_PROPS = Set.of("call");
 
@@ -186,6 +196,10 @@ public class JesParser {
         double ms = parseNum();
         a.props.put("ms", ms);
       }
+      case "waitForCall" -> {
+        String name = expect(STRING, "call name").lexeme;
+        a.props.put("name", name);
+      }
       case "call" -> {
         String name = expect(STRING, "function name").lexeme;
         a.target = name;
@@ -228,6 +242,104 @@ public class JesParser {
             Object v = parseValue();
             a.props.put(k, v);
           } else { throw error("Expected property name in camera action"); }
+        }
+      }
+      case "playAudio", "stopAudio" -> {
+        String id = expect(STRING, "audio id").lexeme;
+        a.target = id;
+        if (match(LBRACE)) {
+          while (!match(RBRACE)) {
+            if (match(IDENT)) {
+              JesToken keyTok = prev();
+              String k = keyTok.lexeme;
+              validateTimelineProp(kind, k, keyTok);
+              expect(COLON, ":");
+              Object v = parseValue();
+              a.props.put(k, v);
+            } else { throw error("Expected property name in audio action"); }
+          }
+        }
+      }
+      case "emitParticles" -> {
+        String target = expect(STRING, "emitter name").lexeme;
+        a.target = target;
+        if (match(LBRACE)) {
+          while (!match(RBRACE)) {
+            if (match(IDENT)) {
+              JesToken keyTok = prev();
+              String k = keyTok.lexeme;
+              validateTimelineProp(kind, k, keyTok);
+              expect(COLON, ":");
+              Object v = parseValue();
+              a.props.put(k, v);
+            } else { throw error("Expected property name in emitParticles"); }
+          }
+        }
+      }
+      case "cameraFollow" -> {
+        // optional immediate target
+        if (peek().type == STRING) {
+          a.target = expect(STRING, "entity name").lexeme;
+        }
+        if (match(LBRACE)) {
+          while (!match(RBRACE)) {
+            if (match(IDENT)) {
+              JesToken keyTok = prev();
+              String k = keyTok.lexeme;
+              validateTimelineProp(kind, k, keyTok);
+              expect(COLON, ":");
+              Object v = parseValue();
+              a.props.put(k, v);
+            } else { throw error("Expected property name in cameraFollow"); }
+          }
+        }
+      }
+      case "setParallax" -> {
+        String target = expect(STRING, "entity name").lexeme;
+        a.target = target;
+        expect(LBRACE, "'{'" );
+        while (!match(RBRACE)) {
+          if (match(IDENT)) {
+            JesToken keyTok = prev();
+            String k = keyTok.lexeme;
+            validateTimelineProp(kind, k, keyTok);
+            expect(COLON, ":");
+            Object v = parseValue();
+            a.props.put(k, v);
+          } else { throw error("Expected property name in setParallax"); }
+        }
+      }
+      case "label" -> {
+        String name = expect(STRING, "label name").lexeme;
+        a.target = name;
+        a.props.put("name", name);
+      }
+      case "jump" -> {
+        String name = expect(STRING, "label name").lexeme;
+        a.target = name;
+      }
+      case "parallel" -> {
+        expect(LBRACE, "'{'");
+        while (!match(RBRACE)) {
+          if (peek().type == EOF) throw error("Unterminated parallel block");
+          JesToken childTok = expect(IDENT, "timeline action");
+          a.children.add(parseTimelineAction(childTok));
+        }
+      }
+      case "loop" -> {
+        // loop 3 { ... } or loop until "event" { ... }
+        if (match(NUMBER)) {
+          a.props.put("count", Double.parseDouble(prev().lexeme));
+        } else if (peek().type == IDENT && "until".equalsIgnoreCase(peek().lexeme)) {
+          match(IDENT);
+          String ev = expect(STRING, "event name").lexeme;
+          a.props.put("until", ev);
+        }
+        expect(LBRACE, "'{'");
+        while (!match(RBRACE)) {
+          if (peek().type == EOF) throw error("Unterminated loop block");
+          JesToken childTok = expect(IDENT, "timeline action");
+          a.children.add(parseTimelineAction(childTok));
         }
       }
       default -> throw error("Unknown timeline action '" + kind + "'", kindTok);

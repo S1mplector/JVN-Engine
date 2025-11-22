@@ -2,6 +2,7 @@ package com.jvn.scripting.jes.runtime;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -30,6 +31,7 @@ public class JesScene2D extends Scene2DBase {
   private final Map<String, Equipment> equipmentByEntity = new HashMap<>();
   private final Map<String, Ai2D> aiByEntity = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
+  private final Map<String, double[]> spawnPositions = new HashMap<>();
 
   private List<JesAst.TimelineAction> timeline = new ArrayList<>();
   private int tlIndex = 0;
@@ -42,6 +44,19 @@ public class JesScene2D extends Scene2DBase {
   private double gridH = 16.0;
   private String playerFacing = "down";
   private final List<TileMap2D> collisionTilemaps = new ArrayList<>();
+  private boolean continuousMovementEnabled = false;
+  private final List<UiButton2D> buttons = new ArrayList<>();
+  private String cameraFollowTarget;
+  private double cameraFollowLerp = 0.2;
+  private final List<RunningAsyncAction> asyncActions = new ArrayList<>();
+  private double heroVx;
+  private double heroVy;
+  private double heroAccel = 400.0;
+  private double heroDrag = 8.0;
+  private double cameraOffsetX;
+  private double cameraOffsetY;
+  private final java.util.Set<String> triggeredEvents = new java.util.HashSet<>();
+  private final Map<String,Integer> labelIndex = new java.util.HashMap<>();
   private static class TriggerLayer {
     final TileMap2D tilemap;
     final String call;
@@ -70,6 +85,22 @@ public class JesScene2D extends Scene2DBase {
     Easing.Type easing = Easing.Type.LINEAR;
     double sAlpha;
     double sZoom;
+    double elapsed;
+  }
+  private static class RunningAsyncAction {
+    final JesAst.TimelineAction action;
+    final ActionRuntime state;
+    double elapsedMs;
+    RunningAsyncAction(JesAst.TimelineAction action, ActionRuntime state) {
+      this.action = action;
+      this.state = state;
+    }
+  }
+  private static class LoopRuntime extends ActionRuntime {
+    int remaining;
+    String untilEvent;
+    int childIndex;
+    final Map<Integer, ActionRuntime> childStates = new HashMap<>();
   }
 
   public PhysicsWorld2D getWorld() { return world; }
@@ -84,8 +115,31 @@ public class JesScene2D extends Scene2DBase {
   }
   public void setDebug(boolean d) { this.debug = d; }
   public void addBinding(String key, String action, Map<String,Object> props) { bindings.add(new Binding(key, action, props)); }
-  public void registerEntity(String name, Entity2D e) { if (name != null && !name.isBlank() && e != null && !named.containsKey(name)) named.put(name, e); }
-  public void setTimeline(List<JesAst.TimelineAction> tl) { this.timeline = tl == null ? new ArrayList<>() : new ArrayList<>(tl); this.tlIndex = 0; this.tlElapsedMs = 0; this.actionState.clear(); }
+  public void registerEntity(String name, Entity2D e) {
+    if (name != null && !name.isBlank() && e != null && !named.containsKey(name)) {
+      named.put(name, e);
+      spawnPositions.put(name, new double[]{ e.getX(), e.getY() });
+    }
+  }
+  public void setTimeline(List<JesAst.TimelineAction> tl) {
+    this.timeline = tl == null ? new ArrayList<>() : new ArrayList<>(tl);
+    this.tlIndex = 0;
+    this.tlElapsedMs = 0;
+    this.actionState.clear();
+    this.asyncActions.clear();
+    this.labelIndex.clear();
+    indexLabels(this.timeline);
+  }
+  private void indexLabels(List<JesAst.TimelineAction> list) {
+    if (list == null) return;
+    for (int idx = 0; idx < list.size(); idx++) {
+      JesAst.TimelineAction a = list.get(idx);
+      if (a == null) continue;
+      if ("label".equals(a.type) && a.target != null && !a.target.isBlank()) {
+        labelIndex.putIfAbsent(a.target, idx);
+      }
+    }
+  }
   public java.util.Set<String> names() { return named.keySet(); }
   public Entity2D find(String name) { return named.get(name); }
   public Map<String, Entity2D> exportNamed() { return java.util.Collections.unmodifiableMap(new java.util.HashMap<>(named)); }
@@ -168,6 +222,9 @@ public class JesScene2D extends Scene2DBase {
     } else if ("attack".equals(name)) {
       handleAttack(actualProps);
     }
+    if (name != null) {
+      triggeredEvents.add(name);
+    }
     Consumer<Map<String,Object>> h = callHandlers.get(name);
     if (h != null) {
       try { h.accept(actualProps); } catch (Exception ignored) {}
@@ -179,6 +236,11 @@ public class JesScene2D extends Scene2DBase {
   public void setGridSize(double w, double h) { this.gridW = w; this.gridH = h; }
   public void setPlayerFacing(String facing) { if (facing != null && !facing.isBlank()) this.playerFacing = facing; }
   public String getPlayerFacing() { return playerFacing; }
+  public void setContinuousMovementEnabled(boolean enabled) { this.continuousMovementEnabled = enabled; }
+  public void setCameraFollow(String target, double lerp) {
+    this.cameraFollowTarget = target;
+    if (lerp > 0) this.cameraFollowLerp = lerp;
+  }
   public boolean rename(String oldName, String newName) {
     if (oldName == null || newName == null || newName.isBlank() || oldName.equals(newName)) return false;
     if (!named.containsKey(oldName) || named.containsKey(newName)) return false;
@@ -204,10 +266,13 @@ public class JesScene2D extends Scene2DBase {
       for (Binding b : bindings) {
         if (in.wasKeyPressed(b.key)) handleAction(b);
       }
+      updateContinuousMovement(in, deltaMs);
+      handleButtons(in);
     }
 
     updateAi(deltaMs);
     updateTimeline(deltaMs);
+    updateCameraFollow(deltaMs);
   }
 
   @Override
@@ -216,7 +281,250 @@ public class JesScene2D extends Scene2DBase {
     // Optional physics debug could be drawn here if needed
   }
 
+  private void updateAsyncActions(long deltaMs) {
+    if (asyncActions.isEmpty()) return;
+    java.util.Iterator<RunningAsyncAction> it = asyncActions.iterator();
+    while (it.hasNext()) {
+      RunningAsyncAction ra = it.next();
+      if (ra == null || ra.action == null) { it.remove(); continue; }
+      if (processAsyncAction(ra.action, ra.state, deltaMs)) {
+        it.remove();
+      }
+    }
+  }
+
+  private boolean processAsyncAction(JesAst.TimelineAction a, ActionRuntime st, long deltaMs) {
+    if (a == null) return true;
+    String type = a.type == null ? "" : a.type;
+    switch (type) {
+      case "wait" -> {
+        st.elapsed += deltaMs;
+        double ms = toNum(a.props.get("ms"), 0);
+        return st.elapsed >= ms;
+      }
+      case "waitForCall" -> {
+        String ev = toStr(a.props.get("name"), null);
+        if (ev != null && triggeredEvents.remove(ev)) return true;
+        return false;
+      }
+      case "call" -> {
+        Consumer<Map<String,Object>> h = callHandlers.get(a.target);
+        if (h != null) {
+          try { h.accept(a.props == null ? java.util.Collections.emptyMap() : a.props); } catch (Exception ignored) {}
+        }
+        return true;
+      }
+      case "move", "walkToTile" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) return true;
+        double tx;
+        double ty;
+        if ("walkToTile".equals(type) && gridW != 0 && gridH != 0 && (a.props.containsKey("tx") || a.props.containsKey("ty"))) {
+          double txTile = toNum(a.props.get("tx"), e.getX() / gridW);
+          double tyTile = toNum(a.props.get("ty"), e.getY() / gridH);
+          tx = txTile * gridW;
+          ty = tyTile * gridH;
+        } else {
+          tx = toNum(a.props.get("x"), e.getX());
+          ty = toNum(a.props.get("y"), e.getY());
+        }
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.sx = e.getX();
+          st.sy = e.getY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        e.setPosition(st.sx + (tx - st.sx) * ep, st.sy + (ty - st.sy) * ep);
+        return p >= 1.0;
+      }
+      case "rotate" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) return true;
+        double tdeg = toNum(a.props.get("deg"), e.getRotationDeg());
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.sRot = e.getRotationDeg();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        e.setRotationDeg(st.sRot + (tdeg - st.sRot) * ep);
+        return p >= 1.0;
+      }
+      case "scale" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) return true;
+        double tsx = toNum(a.props.get("sx"), e.getScaleX());
+        double tsy = toNum(a.props.get("sy"), e.getScaleY());
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.ssx = e.getScaleX();
+          st.ssy = e.getScaleY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        e.setScale(st.ssx + (tsx - st.ssx) * ep, st.ssy + (tsy - st.ssy) * ep);
+        return p >= 1.0;
+      }
+      case "fade" -> {
+        Entity2D e = named.get(a.target);
+        if (e == null) return true;
+        double targetAlpha = toNum(a.props.get("alpha"), getAlpha(e));
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.sAlpha = getAlpha(e);
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        double aVal = st.sAlpha + (targetAlpha - st.sAlpha) * ep;
+        setAlpha(e, aVal);
+        return p >= 1.0;
+      }
+      case "visible" -> {
+        Entity2D e = named.get(a.target);
+        if (e != null) {
+          boolean vis = toBool(a.props.get("value"), true);
+          e.setVisible(vis);
+        }
+        return true;
+      }
+      case "cameraMove" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) return true;
+        double tx = toNum(a.props.get("x"), cam.getX());
+        double ty = toNum(a.props.get("y"), cam.getY());
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.sx = cam.getX();
+          st.sy = cam.getY();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        double nx = st.sx + (tx - st.sx) * ep;
+        double ny = st.sy + (ty - st.sy) * ep;
+        cam.setPosition(nx, ny);
+        return p >= 1.0;
+      }
+      case "cameraZoom" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) return true;
+        double tz = toNum(a.props.get("zoom"), cam.getZoom());
+        double dur = toNum(a.props.get("dur"), 0);
+        if (!st.started) {
+          st.started = true;
+          st.sZoom = cam.getZoom();
+          String easingStr = toStr(a.props.get("easing"), "LINEAR");
+          try { st.easing = Easing.Type.valueOf(easingStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double ep = Easing.apply(st.easing, p);
+        double nz = st.sZoom + (tz - st.sZoom) * ep;
+        cam.setZoom(nz);
+        return p >= 1.0;
+      }
+      case "cameraShake" -> {
+        com.jvn.core.graphics.Camera2D cam = getCamera();
+        if (cam == null) return true;
+        double ampX = toNum(a.props.get("ampX"), 16);
+        double ampY = toNum(a.props.get("ampY"), 16);
+        double dur = toNum(a.props.get("dur"), 300);
+        if (!st.started) {
+          st.started = true;
+          st.sx = cam.getX();
+          st.sy = cam.getY();
+        }
+        st.elapsed += deltaMs;
+        double p = (dur <= 0) ? 1.0 : Math.min(1.0, st.elapsed / dur);
+        double intensity = 1.0 - p;
+        double ox = (Math.random() * 2.0 - 1.0) * ampX * intensity;
+        double oy = (Math.random() * 2.0 - 1.0) * ampY * intensity;
+        cam.setPosition(st.sx + ox, st.sy + oy);
+        if (p >= 1.0) {
+          cam.setPosition(st.sx, st.sy);
+          return true;
+        }
+        return false;
+      }
+      case "damage" -> {
+        String targetName = a.target;
+        double amt = toNum(a.props.get("amount"), 0);
+        String source = toStr(a.props.get("source"), null);
+        applyDamage(targetName, amt, source);
+        return true;
+      }
+      case "heal" -> {
+        String targetName = a.target;
+        double amt = toNum(a.props.get("amount"), 0);
+        String source = toStr(a.props.get("source"), null);
+        heal(targetName, amt, source);
+        return true;
+      }
+      case "emitParticles" -> {
+        Entity2D ent = named.get(a.target);
+        if (ent instanceof ParticleEmitter2D pe) {
+          int cnt = (int) toNum(a.props.get("count"), 10);
+          if (cnt <= 0) cnt = 1;
+          pe.burst(cnt);
+        }
+        return true;
+      }
+      case "playAudio" -> {
+        if (actionHandler != null) {
+          try { actionHandler.accept("playAudio", a.props); } catch (Exception ignored) {}
+        }
+        return true;
+      }
+      case "stopAudio" -> {
+        if (actionHandler != null) {
+          try { actionHandler.accept("stopAudio", a.props); } catch (Exception ignored) {}
+        }
+        return true;
+      }
+      case "cameraFollow" -> {
+        if (a.target != null) cameraFollowTarget = a.target;
+        String tgt = toStr(a.props.get("target"), cameraFollowTarget);
+        cameraFollowTarget = tgt;
+        cameraFollowLerp = toNum(a.props.get("lerp"), cameraFollowLerp);
+        cameraOffsetX = toNum(a.props.get("offsetX"), cameraOffsetX);
+        cameraOffsetY = toNum(a.props.get("offsetY"), cameraOffsetY);
+        return true;
+      }
+      case "setParallax" -> {
+        Entity2D ent = named.get(a.target);
+        if (ent != null) {
+          double px = toNum(a.props.get("px"), ent.getParallaxX());
+          double py = toNum(a.props.get("py"), ent.getParallaxY());
+          ent.setParallax(px, py);
+        }
+        return true;
+      }
+      default -> { return true; }
+    }
+  }
+
   private void updateTimeline(long deltaMs) {
+    updateAsyncActions(deltaMs);
     if (timeline == null || tlIndex >= timeline.size()) return;
     JesAst.TimelineAction a = timeline.get(tlIndex);
     switch (a.type) {
@@ -224,6 +532,12 @@ public class JesScene2D extends Scene2DBase {
         double ms = toNum(a.props.get("ms"), 0);
         tlElapsedMs += deltaMs;
         if (tlElapsedMs >= ms) { tlIndex++; tlElapsedMs = 0; }
+      }
+      case "waitForCall" -> {
+        String ev = toStr(a.props.get("name"), null);
+        if (ev != null && triggeredEvents.remove(ev)) {
+          tlIndex++; tlElapsedMs = 0;
+        }
       }
       case "call" -> {
         Consumer<Map<String,Object>> h = callHandlers.get(a.target);
@@ -441,6 +755,105 @@ public class JesScene2D extends Scene2DBase {
         tlIndex++;
         tlElapsedMs = 0;
       }
+      case "emitParticles" -> {
+        Entity2D ent = named.get(a.target);
+        if (ent instanceof ParticleEmitter2D pe) {
+          int cnt = (int) toNum(a.props.get("count"), 10);
+          if (cnt <= 0) cnt = 1;
+          pe.burst(cnt);
+        }
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "playAudio" -> {
+        if (actionHandler != null) {
+          try { actionHandler.accept("playAudio", a.props); } catch (Exception ignored) {}
+        }
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "stopAudio" -> {
+        if (actionHandler != null) {
+          try { actionHandler.accept("stopAudio", a.props); } catch (Exception ignored) {}
+        }
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "cameraFollow" -> {
+        if (a.target != null) cameraFollowTarget = a.target;
+        String tgt = toStr(a.props.get("target"), cameraFollowTarget);
+        cameraFollowTarget = tgt;
+        cameraFollowLerp = toNum(a.props.get("lerp"), cameraFollowLerp);
+        cameraOffsetX = toNum(a.props.get("offsetX"), cameraOffsetX);
+        cameraOffsetY = toNum(a.props.get("offsetY"), cameraOffsetY);
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "setParallax" -> {
+        Entity2D ent = named.get(a.target);
+        if (ent != null) {
+          double px = toNum(a.props.get("px"), ent.getParallaxX());
+          double py = toNum(a.props.get("py"), ent.getParallaxY());
+          ent.setParallax(px, py);
+        }
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "label" -> { tlIndex++; tlElapsedMs = 0; }
+      case "jump" -> {
+        String label = a.target;
+        Integer idx = labelIndex.get(label);
+        if (idx != null) {
+          tlIndex = idx;
+        } else {
+          tlIndex++;
+        }
+        tlElapsedMs = 0;
+      }
+      case "parallel" -> {
+        if (a.children != null && !a.children.isEmpty()) {
+          for (JesAst.TimelineAction child : a.children) {
+            if (child == null) continue;
+            asyncActions.add(new RunningAsyncAction(child, new ActionRuntime()));
+          }
+        }
+        tlIndex++; tlElapsedMs = 0;
+      }
+      case "loop" -> {
+        LoopRuntime st = (LoopRuntime) actionState.computeIfAbsent(tlIndex, k -> {
+          LoopRuntime lr = new LoopRuntime();
+          lr.remaining = (int) Math.max(0, toNum(a.props.get("count"), 0));
+          Object untilObj = a.props.get("until");
+          if (untilObj instanceof String s) lr.untilEvent = s;
+          return lr;
+        });
+        if (a.children == null || a.children.isEmpty()) { tlIndex++; tlElapsedMs = 0; actionState.remove(tlIndex-1); break; }
+        boolean infinite = st.remaining <= 0 && st.untilEvent == null;
+        while (true) {
+          if (st.childIndex >= a.children.size()) {
+            boolean finishedByEvent = st.untilEvent != null && triggeredEvents.remove(st.untilEvent);
+            if (finishedByEvent) {
+              actionState.remove(tlIndex);
+              tlIndex++; tlElapsedMs = 0;
+              break;
+            }
+            if (!infinite) {
+              if (st.remaining > 0) st.remaining--;
+              if (st.remaining <= 0) {
+                actionState.remove(tlIndex);
+                tlIndex++; tlElapsedMs = 0;
+                break;
+              }
+            }
+            st.childIndex = 0;
+            st.childStates.clear();
+            continue;
+          }
+          JesAst.TimelineAction child = a.children.get(st.childIndex);
+          ActionRuntime cr = st.childStates.computeIfAbsent(st.childIndex, k -> new ActionRuntime());
+          boolean done = processAsyncAction(child, cr, deltaMs);
+          if (done) {
+            st.childIndex++;
+            continue;
+          }
+          break; // still running
+        }
+      }
       default -> { tlIndex++; tlElapsedMs = 0; }
     }
   }
@@ -456,6 +869,50 @@ public class JesScene2D extends Scene2DBase {
     };
     if (!handled && actionHandler != null) {
       try { actionHandler.accept(b.action, b.props); } catch (Exception ignored) {}
+    }
+  }
+
+  private void updateContinuousMovement(Input in, long deltaMs) {
+    if (!continuousMovementEnabled) return;
+    if (playerName == null || playerName.isBlank()) return;
+    Entity2D e = named.get(playerName);
+    if (!(e instanceof CharacterEntity2D ch)) return;
+    double dirX = 0;
+    double dirY = 0;
+    if (in.isKeyDown("W") || in.isKeyDown("UP")) dirY -= 1;
+    if (in.isKeyDown("S") || in.isKeyDown("DOWN")) dirY += 1;
+    if (in.isKeyDown("A") || in.isKeyDown("LEFT")) dirX -= 1;
+    if (in.isKeyDown("D") || in.isKeyDown("RIGHT")) dirX += 1;
+    double len = Math.hypot(dirX, dirY);
+    if (len > 0) { dirX /= len; dirY /= len; }
+    double dt = deltaMs / 1000.0;
+    double maxSpeed = ch.getSpeed();
+    Stats s = statsByEntity.get(playerName);
+    if (s != null && s.getSpeed() > 0) maxSpeed = s.getSpeed();
+    if (maxSpeed <= 0) maxSpeed = 80.0;
+    heroVx += dirX * heroAccel * dt;
+    heroVy += dirY * heroAccel * dt;
+    // apply drag
+    heroVx -= heroVx * heroDrag * dt;
+    heroVy -= heroVy * heroDrag * dt;
+    double vLen = Math.hypot(heroVx, heroVy);
+    if (vLen > maxSpeed) {
+      heroVx = (heroVx / vLen) * maxSpeed;
+      heroVy = (heroVy / vLen) * maxSpeed;
+    }
+    double nx = e.getX() + heroVx * dt;
+    double ny = e.getY() + heroVy * dt;
+    if (isBlockedWorld(nx, ny)) {
+      heroVx = 0; heroVy = 0;
+      return;
+    }
+    e.setPosition(nx, ny);
+    checkTriggersAt(nx, ny);
+    if (Math.abs(heroVx) > 1e-3 || Math.abs(heroVy) > 1e-3) {
+      playerFacing = Math.abs(heroVx) > Math.abs(heroVy)
+          ? (heroVx > 0 ? "right" : "left")
+          : (heroVy > 0 ? "down" : "up");
+      ch.setCurrentAnimation(playerFacing);
     }
   }
 
@@ -663,6 +1120,62 @@ public class JesScene2D extends Scene2DBase {
   public com.jvn.core.physics.PhysicsWorld2D.RaycastHit raycast(double x1, double y1, double x2, double y2) {
     return world == null ? null : world.raycast(x1, y1, x2, y2);
   }
+  private boolean hasLineOfSight(double x1, double y1, double x2, double y2) {
+    double dx = x2 - x1;
+    double dy = y2 - y1;
+    double dist = Math.hypot(dx, dy);
+    if (dist == 0) return true;
+    double step = Math.max(1.0, Math.min(gridW, gridH) * 0.5);
+    int samples = (int) Math.ceil(dist / step);
+    double nx = dx / samples;
+    double ny = dy / samples;
+    double cx = x1;
+    double cy = y1;
+    for (int i = 0; i < samples; i++) {
+      cx += nx; cy += ny;
+      if (isBlockedWorld(cx, cy)) return false;
+    }
+    return true;
+  }
+
+  public List<int[]> findPathTiles(double sx, double sy, double tx, double ty, int maxNodes) {
+    List<int[]> empty = new ArrayList<>();
+    if (gridW <= 0 || gridH <= 0) return empty;
+    int startX = (int) Math.floor(sx / gridW);
+    int startY = (int) Math.floor(sy / gridH);
+    int goalX = (int) Math.floor(tx / gridW);
+    int goalY = (int) Math.floor(ty / gridH);
+    if (startX == goalX && startY == goalY) return empty;
+    record Node(int x, int y, int g, int f, Node parent) {}
+    java.util.PriorityQueue<Node> open = new java.util.PriorityQueue<>(java.util.Comparator.comparingInt(n -> n.f));
+    java.util.Set<String> closed = new java.util.HashSet<>();
+    open.add(new Node(startX, startY, 0, Math.abs(goalX - startX) + Math.abs(goalY - startY), null));
+    int explored = 0;
+    while (!open.isEmpty() && explored < maxNodes) {
+      Node n = open.poll(); explored++;
+      if (n.x == goalX && n.y == goalY) {
+        List<int[]> path = new ArrayList<>();
+        Node cur = n.parent;
+        while (cur != null && !(cur.x == startX && cur.y == startY)) {
+          path.add(0, new int[]{cur.x, cur.y});
+          cur = cur.parent;
+        }
+        return path;
+      }
+      String key = n.x + "," + n.y;
+      if (!closed.add(key)) continue;
+      int[][] dirs = new int[][]{{1,0},{-1,0},{0,1},{0,-1}};
+      for (int[] d : dirs) {
+        int nx = n.x + d[0];
+        int ny = n.y + d[1];
+        if (isBlockedTile(nx, ny)) continue;
+        int g = n.g + 1;
+        int h = Math.abs(goalX - nx) + Math.abs(goalY - ny);
+        open.add(new Node(nx, ny, g, g + h, n));
+      }
+    }
+    return empty;
+  }
 
   private void checkTriggersAt(double x, double y) {
     if (triggerLayers.isEmpty() || gridW == 0 || gridH == 0) return;
@@ -764,6 +1277,28 @@ public class JesScene2D extends Scene2DBase {
     }
   }
 
+  private void handleButtons(Input in) {
+    if (buttons.isEmpty() || in == null) return;
+    if (!in.wasMousePressed(0)) return;
+    double mx = in.getMouseX();
+    double my = in.getMouseY();
+    for (UiButton2D btn : buttons) {
+      if (btn == null || !btn.isVisible()) continue;
+      double bx = btn.getX();
+      double by = btn.getY();
+      double bw = btn.getWidth();
+      double bh = btn.getHeight();
+      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+        String call = btn.getCall();
+        if (call != null && !call.isBlank()) {
+          Map<String,Object> props = new HashMap<>(btn.getProps());
+          props.put("x", mx); props.put("y", my);
+          invokeCall(call, props);
+        }
+      }
+    }
+  }
+
   private void updateAi(long deltaMs) {
     if (aiByEntity.isEmpty()) return;
     double dt = deltaMs / 1000.0;
@@ -779,8 +1314,27 @@ public class JesScene2D extends Scene2DBase {
       String tLower = type.toLowerCase();
       if ("chase".equals(tLower) || "chasehero".equals(tLower) || "chase_and_attack".equals(tLower)) {
         updateAiChaseAndAttack(name, e, ai, dt, deltaMs);
+      } else if ("patrol".equals(tLower) || "patrol_chase".equals(tLower)) {
+        updateAiPatrol(name, e, ai, dt, deltaMs, "patrol_chase".equals(tLower));
+      } else if ("guard".equals(tLower) || tLower.contains("flee")) {
+        updateAiChaseAndAttack(name, e, ai, dt, deltaMs);
       }
     }
+  }
+
+  private void updateCameraFollow(long deltaMs) {
+    if (cameraFollowTarget == null || cameraFollowTarget.isBlank()) return;
+    com.jvn.core.graphics.Camera2D cam = getCamera();
+    if (cam == null) return;
+    Entity2D t = named.get(cameraFollowTarget);
+    if (t == null) return;
+    double lerp = cameraFollowLerp;
+    double p = Math.max(0.0, Math.min(1.0, lerp));
+    double targetX = t.getX() + cameraOffsetX;
+    double targetY = t.getY() + cameraOffsetY;
+    double nx = cam.getX() + (targetX - cam.getX()) * p;
+    double ny = cam.getY() + (targetY - cam.getY()) * p;
+    cam.setPosition(nx, ny);
   }
 
   private void updateAiChaseAndAttack(String name, Entity2D e, Ai2D ai, double dt, long deltaMs) {
@@ -802,17 +1356,36 @@ public class JesScene2D extends Scene2DBase {
 
     double aggroRange = ai.getAggroRange();
     if (aggroRange > 0 && dist > aggroRange) return;
+    if (ai.isRequiresLineOfSight() && !hasLineOfSight(ex, ey, tx, ty)) return;
+
+    double guardRadius = ai.getGuardRadius();
+    if (guardRadius > 0) {
+      double[] spawn = spawnPositions.get(name);
+      if (spawn != null && spawn.length >= 2) {
+        double sx = spawn[0];
+        double sy = spawn[1];
+        double distFromSpawn = Math.hypot(ex - sx, ey - sy);
+        if (distFromSpawn > guardRadius && dist > guardRadius) {
+          // Return to guard center
+          dx = sx - ex; dy = sy - ey; dist = Math.hypot(dx, dy);
+          tx = sx; ty = sy;
+        }
+      }
+    }
+
+    double fleeDistance = ai.getFleeDistance();
+    boolean shouldFlee = fleeDistance > 0 && dist < fleeDistance;
 
     double attackRange = ai.getAttackRange();
     if (attackRange <= 0) attackRange = gridW;
 
-    double cooldown = ai.getAttackCooldownMs() + deltaMs;
+    double cooldown = Math.max(0.0, ai.getAttackCooldownMs() - deltaMs);
     ai.setAttackCooldownMs(cooldown);
 
-    if (dist <= attackRange) {
+    if (!shouldFlee && dist <= attackRange) {
       double interval = ai.getAttackIntervalMs();
       if (interval <= 0) interval = 1000.0;
-      if (cooldown >= interval) {
+      if (cooldown <= 0) {
         double amount = ai.getAttackAmount();
         if (amount <= 0) {
           Stats s = statsByEntity.get(name);
@@ -821,7 +1394,7 @@ public class JesScene2D extends Scene2DBase {
         if (amount > 0) {
           applyDamage(targetName, amount, name);
         }
-        ai.setAttackCooldownMs(0.0);
+        ai.setAttackCooldownMs(interval);
       }
       return;
     }
@@ -836,13 +1409,98 @@ public class JesScene2D extends Scene2DBase {
     }
 
     if (dist <= 0) return;
+    // Obstacle-aware smoothing
+    double dirX = dx / dist;
+    double dirY = dy / dist;
+    double blend = 0.7;
+    double lastX = ai.getLastDirX();
+    double lastY = ai.getLastDirY();
+    if (lastX != 0 || lastY != 0) {
+      dirX = lastX * blend + dirX * (1 - blend);
+      dirY = lastY * blend + dirY * (1 - blend);
+      double len = Math.hypot(dirX, dirY);
+      if (len > 0) { dirX /= len; dirY /= len; }
+    }
+    ai.setLastDir(dirX, dirY);
+
+    if (shouldFlee) { dirX = -dirX; dirY = -dirY; }
+
     double maxStep = speed * dt;
     if (maxStep <= 0) return;
     double step = Math.min(maxStep, dist);
-    double nx = ex + dx * (step / dist);
-    double ny = ey + dy * (step / dist);
-    if (isBlockedWorld(nx, ny)) return;
+    double nx = ex + dirX * step;
+    double ny = ey + dirY * step;
+    if (isBlockedWorld(nx, ny)) {
+      // attempt simple grid pathfinding fallback
+      List<int[]> path = findPathTiles(ex, ey, tx, ty, 512);
+      if (!path.isEmpty()) {
+        int[] next = path.get(0);
+        double px = next[0] * gridW + gridW * 0.5;
+        double py = next[1] * gridH + gridH * 0.5;
+        double pdx = px - ex;
+        double pdy = py - ey;
+        double pdist = Math.hypot(pdx, pdy);
+        if (pdist > 0) {
+          double step2 = Math.min(maxStep, pdist);
+          nx = ex + pdx * (step2 / pdist);
+          ny = ey + pdy * (step2 / pdist);
+        } else return;
+        if (isBlockedWorld(nx, ny)) return;
+      } else {
+        return;
+      }
+    }
     e.setPosition(nx, ny);
+  }
+
+  private void updateAiPatrol(String name, Entity2D e, Ai2D ai, double dt, long deltaMs, boolean chaseOnAggro) {
+    String targetName = chaseOnAggro ? (ai.getTarget() == null || ai.getTarget().isBlank() ? playerName : ai.getTarget()) : null;
+    if (targetName != null) {
+      Entity2D target = named.get(targetName);
+      if (target != null) {
+        double dx = target.getX() - e.getX();
+        double dy = target.getY() - e.getY();
+        double dist = Math.hypot(dx, dy);
+        double aggro = ai.getAggroRange();
+        if (aggro > 0 && dist <= aggro) {
+          updateAiChaseAndAttack(name, e, ai, dt, deltaMs);
+          return;
+        }
+      }
+    }
+    // Wander/patrol around spawn
+    double[] spawn = spawnPositions.get(name);
+    double sx = spawn != null && spawn.length >= 2 ? spawn[0] : e.getX();
+    double sy = spawn != null && spawn.length >= 2 ? spawn[1] : e.getY();
+    ai.setPatrolElapsed(ai.getPatrolElapsed() + deltaMs);
+    if (!ai.hasPatrolGoal() || ai.getPatrolElapsed() >= ai.getPatrolIntervalMs()) {
+      ai.setPatrolElapsed(0);
+      double radius = ai.getPatrolRadius() > 0 ? ai.getPatrolRadius() : Math.min(gridW, gridH) * 3.0;
+      double ang = Math.random() * Math.PI * 2;
+      ai.setPatrolGoal(sx + Math.cos(ang) * radius, sy + Math.sin(ang) * radius);
+    }
+    if (ai.hasPatrolGoal()) {
+      double gx = ai.getPatrolGoalX();
+      double gy = ai.getPatrolGoalY();
+      double dx = gx - e.getX();
+      double dy = gy - e.getY();
+      double dist = Math.hypot(dx, dy);
+      double speed = ai.getMoveSpeed();
+      if (speed <= 0) {
+        Stats s = statsByEntity.get(name);
+        if (s != null) speed = s.getSpeed();
+      }
+      if (speed <= 0) speed = 60.0;
+      double step = speed * dt;
+      if (dist <= step || dist == 0) {
+        e.setPosition(gx, gy);
+        ai.clearPatrolGoal();
+      } else {
+        double nx = e.getX() + dx * (step / dist);
+        double ny = e.getY() + dy * (step / dist);
+        if (!isBlockedWorld(nx, ny)) e.setPosition(nx, ny);
+      }
+    }
   }
 
   private void handleAttack(Map<String,Object> props) {

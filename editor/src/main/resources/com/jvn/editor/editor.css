@@ -37,9 +37,22 @@
  .punct { -fx-fill: #8ab4f8; }
 
  .error {
-   -fx-underline: true;
-   -fx-fill: #f38ba8; /* red accent */
- }
+  -fx-underline: true;
+  -fx-fill: #f38ba8; /* red accent */
+}
+
+.error-line {
+  -fx-background-color: rgba(243, 139, 168, 0.1);
+}
+
+.lint-label {
+  -fx-padding: 4 8 4 8;
+  -fx-font-size: 11px;
+  -fx-text-fill: #e6e6e6;
+  -fx-background-color: #1a1a1a;
+  -fx-border-color: #2a2a2a;
+  -fx-border-width: 1 0 0 0;
+}
 
  /* Line numbers (RichTextFX LineNumberFactory) */
  .lineno { -fx-background-color: #1a1a1a; -fx-padding: 0 8 0 8; }

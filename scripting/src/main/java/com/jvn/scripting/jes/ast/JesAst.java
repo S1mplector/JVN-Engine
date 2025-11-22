@@ -36,6 +36,7 @@ public class JesAst {
     public String type; // wait, move, rotate, scale, call
     public String target; // optional entity name
     public final Map<String,Object> props = new HashMap<>();
+    public final List<TimelineAction> children = new ArrayList<>();
   }
   public static class TilesetDecl {
     public String name;
