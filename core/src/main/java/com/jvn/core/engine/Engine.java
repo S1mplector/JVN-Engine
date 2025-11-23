@@ -23,6 +23,9 @@ public class Engine {
 
   public Engine(ApplicationConfig config) {
     this.config = config;
+    if (config != null) {
+      setFixedUpdateStepMs(config.fixedUpdateMs(), config.fixedUpdateMaxSteps());
+    }
   }
 
   public void start() {

@@ -39,6 +39,22 @@ class PhysicsWorld2DImprovedTest {
         "Body should be pushed out of the floor");
   }
 
+  @Test
+  void sensorsTriggerWhenOverlapping() {
+    PhysicsWorld2D world = new PhysicsWorld2D();
+    RigidBody2D sensor = RigidBody2D.circle(0, 0, 1);
+    sensor.setSensor(true);
+    RigidBody2D body = RigidBody2D.circle(0.5, 0, 1);
+    final int[] triggered = {0};
+    world.setSensorListener((s, other) -> triggered[0]++);
+    world.addBody(sensor);
+    world.addBody(body);
+
+    world.step(16);
+
+    assertTrue(triggered[0] > 0, "Sensor should trigger when overlapping another body");
+  }
+
   private boolean intersects(RigidBody2D a, RigidBody2D b) {
     if (a.getShapeType() == RigidBody2D.ShapeType.CIRCLE && b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
       var ca = a.getCircle();

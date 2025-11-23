@@ -12,7 +12,7 @@ import java.awt.RadialGradientPaint;
 import java.awt.image.BufferedImage;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
@@ -28,10 +28,14 @@ public class SwingBlitter2D implements Blitter2D {
   private BasicStroke basicStroke = new BasicStroke(strokeWidth, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_MITER);
   private final Deque<AffineTransform> transforms = new ArrayDeque<>();
   private final Deque<Composite> composites = new ArrayDeque<>();
+  private final Deque<Shape> clips = new ArrayDeque<>();
   private Path2D currentPath = null;
   private String hAlign = "left";
   private String vAlign = "baseline";
-  private final Map<String, BufferedImage> imageCache = new HashMap<>();
+  private int cacheCapacity = 128;
+  private final Map<String, BufferedImage> imageCache = new LinkedHashMap<>(16, 0.75f, true) {
+    @Override protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> eldest) { return size() > cacheCapacity; }
+  };
   private final Set<String> missing = new HashSet<>();
 
   public SwingBlitter2D(Graphics2D g2) {
@@ -43,6 +47,10 @@ public class SwingBlitter2D implements Blitter2D {
   public void dispose() {
     if (g2 != null) g2.dispose();
   }
+
+  public void setCacheCapacity(int capacity) { this.cacheCapacity = Math.max(16, capacity); }
+  public void evict(String path) { if (path != null) { imageCache.remove(path); missing.remove(path); } }
+  public void clearCache() { imageCache.clear(); missing.clear(); }
 
   @Override
   public void clear(double r, double g, double b, double a) {
@@ -89,12 +97,14 @@ public class SwingBlitter2D implements Blitter2D {
   public void push() {
     transforms.push(g2.getTransform());
     composites.push(g2.getComposite());
+    clips.push(g2.getClip());
   }
 
   @Override
   public void pop() {
     if (!transforms.isEmpty()) g2.setTransform(transforms.pop());
     if (!composites.isEmpty()) g2.setComposite(composites.pop());
+    if (!clips.isEmpty()) g2.setClip(clips.pop());
   }
 
   @Override
@@ -212,6 +222,27 @@ public class SwingBlitter2D implements Blitter2D {
     if (text == null) return 0;
     FontMetrics fm = g2.getFontMetrics(new Font(g2.getFont().getFamily(), bold ? Font.BOLD : Font.PLAIN, (int) Math.round(size)));
     return fm.stringWidth(text);
+  }
+
+  @Override
+  public void setClipRect(double x, double y, double w, double h) {
+    g2.setClip(new java.awt.geom.Rectangle2D.Double(x, y, w, h));
+  }
+
+  @Override
+  public void setTextAlign(String hAlign, String vAlign) {
+    if (hAlign != null) this.hAlign = hAlign;
+    if (vAlign != null) this.vAlign = vAlign;
+  }
+
+  @Override
+  public void setBlendMode(String mode) {
+    if (mode == null || mode.isBlank() || "normal".equalsIgnoreCase(mode)) {
+      g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+      return;
+    }
+    // AWT lacks true additive without custom composite; approximate with SrcOver.
+    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
   }
 
   // Vector path extensions

@@ -193,7 +193,7 @@ public class FxLauncher extends Application {
 
       // Feed to engine input system
       if (engine != null && engine.input() != null) {
-        engine.input().keyDown(e.getCode().getName());
+        engine.input().keyDown(com.jvn.core.input.InputCode.key(e.getCode().getName()));
       }
     });
 
@@ -202,7 +202,7 @@ public class FxLauncher extends Application {
     scene.setOnKeyReleased(e -> {
       // Feed to engine input system
       if (engine != null && engine.input() != null) {
-        engine.input().keyUp(e.getCode().getName());
+        engine.input().keyUp(com.jvn.core.input.InputCode.key(e.getCode().getName()));
       }
     });
 

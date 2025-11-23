@@ -16,4 +16,4 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x gradlew
       - name: Run unit tests
-        run: ./gradlew :core:test :scripting:test --no-daemon
+        run: ./gradlew :core:test :scripting:test :swing:test --no-daemon
