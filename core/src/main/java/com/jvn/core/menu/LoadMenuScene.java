@@ -105,6 +105,14 @@ public class LoadMenuScene implements Scene {
 
   public String getSaveDirectory() { return saveManager.getSaveDirectory(); }
   public String getSelectedName() { return (saves.isEmpty() ? null : saves.get(selected)); }
+  public String getSelectedRpgSummary() {
+    String name = getSelectedName();
+    if (name == null) return null;
+    try {
+      VnSaveData data = saveManager.load(name);
+      return summarizeRpgState(data.getRpgState());
+    } catch (Exception ignored) { return null; }
+  }
 
   public boolean deleteSelected() {
     if (saves.isEmpty()) return false;
@@ -173,6 +181,16 @@ public class LoadMenuScene implements Scene {
     }
   }
 
+  private String summarizeRpgState(Object rpg) {
+    if (rpg instanceof com.jvn.core.rpg.RpgState state) {
+      int party = state.getActors().size();
+      double totalHp = state.getActors().values().stream().mapToDouble(com.jvn.core.rpg.RpgStats::getHp).sum();
+      double totalMax = state.getActors().values().stream().mapToDouble(com.jvn.core.rpg.RpgStats::getMaxHp).sum();
+      return "Party " + party + " • HP " + Math.round(totalHp) + "/" + Math.round(totalMax);
+    }
+    return null;
+  }
+
   private VnScenario loadScenario(String scriptName) {
     try {
       AssetCatalog assets = new AssetCatalog();
@@ -218,4 +236,3 @@ public class LoadMenuScene implements Scene {
   @Override
   public void update(long deltaMs) { }
 }
-

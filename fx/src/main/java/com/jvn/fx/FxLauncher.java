@@ -17,6 +17,12 @@ import com.jvn.fx.render.FxSceneRendererRegistry;
 import com.jvn.core.graphics.Camera2D;
 import com.jvn.core.graphics.ViewportScaler2D;
 import com.jvn.core.demo.Example2DScene;
+import com.jvn.core.input.ActionBindingProfile;
+import com.jvn.core.input.ActionBindingProfileStore;
+import com.jvn.core.input.ActionMap;
+import com.jvn.core.input.InputActions;
+import com.jvn.core.input.InputCode;
+import com.jvn.core.vn.VnSettingsStore;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 // no direct import of javafx.scene.Scene to avoid name clash; use fully qualified name
@@ -46,6 +52,7 @@ public class FxLauncher extends Application {
   private MenuRenderer menuRenderer;
   private FxBlitter2D blitter2D;
   private FxSceneRendererRegistry rendererRegistry;
+  private ActionMap actionMap;
   private double mouseX = 0;
   private double mouseY = 0;
 
@@ -96,6 +103,7 @@ public class FxLauncher extends Application {
     this.menuRenderer = new MenuRenderer(gc, MenuTheme.fromAssets());
     this.blitter2D = new FxBlitter2D(gc);
     this.rendererRegistry = createRendererRegistry();
+    this.actionMap = loadActionBindings();
     scene.widthProperty().addListener((obs, ov, nv) -> this.canvas.setWidth(nv.doubleValue()));
     scene.heightProperty().addListener((obs, ov, nv) -> this.canvas.setHeight(nv.doubleValue()));
 
@@ -193,7 +201,37 @@ public class FxLauncher extends Application {
 
       // Feed to engine input system
       if (engine != null && engine.input() != null) {
-        engine.input().keyDown(com.jvn.core.input.InputCode.key(e.getCode().getName()));
+        InputCode code = InputCode.key(e.getCode().getName());
+        engine.input().keyDown(code);
+        if (actionMap != null) {
+          if (actionMap.matches(InputActions.ADVANCE, code)) { if (!handleMenuEnter()) handleAdvance(); }
+          if (actionMap.matches(InputActions.MENU_CONFIRM, code)) { if (!handleMenuEnter()) handleAdvance(); }
+          if (actionMap.matches(InputActions.SKIP_TOGGLE, code)) handleToggleSkip();
+          if (actionMap.matches(InputActions.AUTO_TOGGLE, code)) handleToggleAutoPlay();
+          if (actionMap.matches(InputActions.HIDE_UI, code)) handleToggleUI();
+          if (actionMap.matches(InputActions.HISTORY, code)) handleToggleHistory();
+          if (actionMap.matches(InputActions.SETTINGS, code)) {
+            com.jvn.core.scene.Scene currentScene = engine.scenes().peek();
+            if (currentScene instanceof VnScene vn) {
+              engine.scenes().push(new SettingsScene(vn.getState().getSettings(), vn.getAudioFacade()));
+            }
+          }
+          if (actionMap.matches(InputActions.QUICK_SAVE, code)) handleQuickSave();
+          if (actionMap.matches(InputActions.QUICK_LOAD, code)) handleQuickLoad();
+          if (actionMap.matches(InputActions.SAVE_MENU, code)) {
+            com.jvn.core.scene.Scene currentScene = engine.scenes().peek();
+            if (currentScene instanceof VnScene vn) {
+              engine.scenes().push(new SaveMenuScene(engine, new com.jvn.core.vn.save.VnSaveManager(), vn));
+            }
+          }
+          if (actionMap.matches(InputActions.MENU_BACK, code)) handleMenuBack();
+          if (actionMap.matches(InputActions.MENU_UP, code)) handleMenuMove(-1);
+          if (actionMap.matches(InputActions.MENU_DOWN, code)) handleMenuMove(1);
+          if (actionMap.matches(InputActions.MENU_LEFT, code)) handleSettingsAdjust(-1);
+          if (actionMap.matches(InputActions.MENU_RIGHT, code)) handleSettingsAdjust(1);
+          if (actionMap.matches(InputActions.MENU_DELETE, code)) handleMenuDelete();
+          if (actionMap.matches(InputActions.MENU_RENAME, code)) handleMenuRename();
+        }
       }
     });
 
@@ -345,6 +383,16 @@ public class FxLauncher extends Application {
       b.pop();
     });
     return reg;
+  }
+
+  private ActionMap loadActionBindings() {
+    try {
+      return FxLauncherBindings.load();
+    } catch (Exception e) {
+      ActionMap map = new ActionMap(new com.jvn.core.input.Input());
+      map.loadProfile(InputActions.defaultProfile());
+      return map;
+    }
   }
 
   private void handleAdvance() {

@@ -136,6 +136,23 @@ public class SaveMenuScene implements Scene {
     } catch (Exception ignored) { return null; }
   }
 
+  public String getCurrentRpgSummary() {
+    try {
+      Object rpg = currentVnScene.getState().getRpgState();
+      return summarizeRpgState(rpg);
+    } catch (Exception e) { return null; }
+  }
+
+  private String summarizeRpgState(Object rpg) {
+    if (rpg instanceof com.jvn.core.rpg.RpgState state) {
+      int party = state.getActors().size();
+      double totalHp = state.getActors().values().stream().mapToDouble(com.jvn.core.rpg.RpgStats::getHp).sum();
+      double totalMax = state.getActors().values().stream().mapToDouble(com.jvn.core.rpg.RpgStats::getMaxHp).sum();
+      return "Party " + party + " • HP " + Math.round(totalHp) + "/" + Math.round(totalMax);
+    }
+    return null;
+  }
+
   private void writeThumbnailFor(String name) {
     try {
       var state = currentVnScene.getState();

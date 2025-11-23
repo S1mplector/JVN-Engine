@@ -82,6 +82,12 @@ public class ActionMap {
     profile.bindings().forEach((action, codes) -> bindings.put(action, new HashSet<>(codes)));
   }
 
+  public boolean matches(String action, InputCode code) {
+    if (action == null || code == null) return false;
+    Set<InputCode> set = bindings.get(action);
+    return set != null && set.contains(code);
+  }
+
   private boolean test(String action, Predicate<InputCode> predicate) {
     Set<InputCode> set = bindings.get(action);
     if (set == null) return false;

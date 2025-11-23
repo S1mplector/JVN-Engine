@@ -62,6 +62,12 @@ public class MenuRenderer {
       if (f.exists()) drawPreviewFile(f, w, h); else drawPreviewPlaceholder(w, h);
       drawPreviewMetadata(null, scene.getSelectedTimestamp(), null, w, h);
     }
+    String rpg = scene.getCurrentRpgSummary();
+    if (rpg != null && !rpg.isBlank()) {
+      gc.setFill(Color.LIGHTGRAY);
+      gc.setFont(theme.getHintFont());
+      gc.fillText(rpg, 20, h - 50);
+    }
     drawHints(Localization.t("common.select") + ": Enter    " + Localization.t("common.back") + ": Esc    "
         + Localization.t("save.delete") + ": Delete    " + Localization.t("save.rename") + ": R",
         w, h);
@@ -92,6 +98,12 @@ public class MenuRenderer {
         scene.getSelectedNodeIndex(),
         w, h
       );
+      String rpg = scene.getSelectedRpgSummary();
+      if (rpg != null && !rpg.isBlank()) {
+        gc.setFill(Color.LIGHTGRAY);
+        gc.setFont(theme.getHintFont());
+        gc.fillText(rpg, 20, h - 50);
+      }
     }
     drawHints(Localization.t("common.select") + ": Enter    " + Localization.t("common.back") + ": Esc    "
         + Localization.t("load.delete") + ": Delete    " + Localization.t("load.rename") + ": R",
