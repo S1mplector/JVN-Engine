@@ -110,28 +110,51 @@ public class MenuRenderer {
       Localization.t("settings.voice_volume") + ": " + toPct(s.getVoiceVolume()),
       Localization.t("settings.auto_play_delay") + ": " + s.getAutoPlayDelay() + " ms",
       Localization.t("settings.skip_unread") + ": " + (s.isSkipUnreadText() ? "ON" : "OFF"),
-      Localization.t("settings.skip_after_choices") + ": " + (s.isSkipAfterChoices() ? "ON" : "OFF")
+      Localization.t("settings.skip_after_choices") + ": " + (s.isSkipAfterChoices() ? "ON" : "OFF"),
+      "Physics: Fixed Step " + s.getPhysicsFixedStepMs() + " ms",
+      "Physics: Max Substeps " + s.getPhysicsMaxSubSteps(),
+      "Physics: Default Friction " + toPct((float) s.getPhysicsDefaultFriction()),
+      "Input: Save/Load (" + s.getInputProfilePath() + ")" + (scene.getBindingStatus().isEmpty() ? "" : " • " + scene.getBindingStatus())
     };
 
     drawMenuList(items, scene.getSelected(), w, h);
     double yStart = h * 0.35;
     double lineH = 40;
-    double sliderW = w * 0.4;
+    double sliderW = w * 0.45;
     double sliderX = (w - sliderW) / 2;
 
     double textSpeedMin = 10.0, textSpeedMax = 120.0;
     double autoDelayMin = 500.0, autoDelayMax = 5000.0;
-    double[] values = new double[] {
-      clamp01((s.getTextSpeed() - textSpeedMin) / (textSpeedMax - textSpeedMin)),
-      clamp01(s.getBgmVolume()),
-      clamp01(s.getSfxVolume()),
-      clamp01(s.getVoiceVolume()),
-      clamp01((s.getAutoPlayDelay() - autoDelayMin) / (autoDelayMax - autoDelayMin))
-    };
 
-    for (int i = 0; i < values.length; i++) {
-      double y = yStart + i * lineH + 10;
-      drawSlider(sliderX, y, sliderW, values[i], i == scene.getSelected());
+    int sliderRow = 0;
+    for (int i = 0; i < items.length; i++) {
+      double value;
+      boolean hasSlider = switch (i) {
+        case 0 -> true;
+        case 1 -> true;
+        case 2 -> true;
+        case 3 -> true;
+        case 4 -> true;
+        case 7 -> true;
+        case 8 -> true;
+        case 9 -> true;
+        default -> false;
+      };
+      if (!hasSlider) continue;
+      value = switch (i) {
+        case 0 -> clamp01((s.getTextSpeed() - textSpeedMin) / (textSpeedMax - textSpeedMin));
+        case 1 -> clamp01(s.getBgmVolume());
+        case 2 -> clamp01(s.getSfxVolume());
+        case 3 -> clamp01(s.getVoiceVolume());
+        case 4 -> clamp01((s.getAutoPlayDelay() - autoDelayMin) / (autoDelayMax - autoDelayMin));
+        case 7 -> clamp01(s.getPhysicsFixedStepMs() / 50.0);
+        case 8 -> clamp01((s.getPhysicsMaxSubSteps() - 1) / 7.0);
+        case 9 -> clamp01(s.getPhysicsDefaultFriction());
+        default -> 0;
+      };
+      double y = yStart + sliderRow * lineH + 10;
+      drawSlider(sliderX, y, sliderW, value, i == scene.getSelected());
+      sliderRow++;
     }
     drawHints("Up/Down, Left/Right, Enter • " + Localization.t("common.back") + ": Esc", w, h);
   }

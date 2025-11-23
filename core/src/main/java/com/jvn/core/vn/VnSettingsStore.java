@@ -34,6 +34,11 @@ public class VnSettingsStore {
         try { s.setAutoPlayDelay(Long.parseLong(p.getProperty("auto_play_delay", Long.toString(s.getAutoPlayDelay())))); } catch (Exception ignored) {}
         try { s.setSkipUnreadText(Boolean.parseBoolean(p.getProperty("skip_unread_text", Boolean.toString(s.isSkipUnreadText())))); } catch (Exception ignored) {}
         try { s.setSkipAfterChoices(Boolean.parseBoolean(p.getProperty("skip_after_choices", Boolean.toString(s.isSkipAfterChoices())))); } catch (Exception ignored) {}
+        try { s.setPhysicsFixedStepMs(Long.parseLong(p.getProperty("physics_fixed_step_ms", Long.toString(s.getPhysicsFixedStepMs())))); } catch (Exception ignored) {}
+        try { s.setPhysicsMaxSubSteps(Integer.parseInt(p.getProperty("physics_max_substeps", Integer.toString(s.getPhysicsMaxSubSteps())))); } catch (Exception ignored) {}
+        try { s.setPhysicsDefaultFriction(Double.parseDouble(p.getProperty("physics_default_friction", Double.toString(s.getPhysicsDefaultFriction())))); } catch (Exception ignored) {}
+        try { s.setInputProfilePath(p.getProperty("input_profile_path", s.getInputProfilePath())); } catch (Exception ignored) {}
+        try { s.setInputProfileSerialized(p.getProperty("input_profile_serialized", s.getInputProfileSerialized())); } catch (Exception ignored) {}
       }
     } catch (Exception ignored) {
     }
@@ -52,6 +57,11 @@ public class VnSettingsStore {
       p.setProperty("auto_play_delay", Long.toString(s.getAutoPlayDelay()));
       p.setProperty("skip_unread_text", Boolean.toString(s.isSkipUnreadText()));
       p.setProperty("skip_after_choices", Boolean.toString(s.isSkipAfterChoices()));
+      p.setProperty("physics_fixed_step_ms", Long.toString(s.getPhysicsFixedStepMs()));
+      p.setProperty("physics_max_substeps", Integer.toString(s.getPhysicsMaxSubSteps()));
+      p.setProperty("physics_default_friction", Double.toString(s.getPhysicsDefaultFriction()));
+      p.setProperty("input_profile_path", s.getInputProfilePath());
+      p.setProperty("input_profile_serialized", s.getInputProfileSerialized());
       try (FileOutputStream out = new FileOutputStream(settingsPath.toFile())) {
         p.store(out, "JVN Settings");
       }

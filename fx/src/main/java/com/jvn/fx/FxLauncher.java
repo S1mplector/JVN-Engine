@@ -536,7 +536,7 @@ public class FxLauncher extends Application {
 
   private double computeSliderValue01(double mouseX) {
     double w = canvas.getWidth();
-    double sliderW = w * 0.4;
+    double sliderW = w * 0.45;
     double sliderX = (w - sliderW) / 2;
     double v = (mouseX - sliderX) / sliderW;
     if (v < 0) v = 0;

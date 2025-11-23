@@ -67,7 +67,15 @@ public class VnSaveManager {
     sd.setAutoPlayDelay(s.getAutoPlayDelay());
     sd.setSkipUnreadText(s.isSkipUnreadText());
     sd.setSkipAfterChoices(s.isSkipAfterChoices());
+    sd.setPhysicsFixedStepMs(s.getPhysicsFixedStepMs());
+    sd.setPhysicsMaxSubSteps(s.getPhysicsMaxSubSteps());
+    sd.setPhysicsDefaultFriction(s.getPhysicsDefaultFriction());
+    sd.setInputProfilePath(s.getInputProfilePath());
+    sd.setInputProfileSerialized(s.getInputProfileSerialized());
     saveData.setSettings(sd);
+
+    // Optional RPG state passthrough
+    saveData.setRpgState(state.getRpgState());
 
     saveData.setSaveTimestamp(System.currentTimeMillis());
     
@@ -186,7 +194,13 @@ public class VnSaveManager {
       s.setAutoPlayDelay(sd.getAutoPlayDelay());
       s.setSkipUnreadText(sd.isSkipUnreadText());
       s.setSkipAfterChoices(sd.isSkipAfterChoices());
+      s.setPhysicsFixedStepMs(sd.getPhysicsFixedStepMs());
+      s.setPhysicsMaxSubSteps(sd.getPhysicsMaxSubSteps());
+      s.setPhysicsDefaultFriction(sd.getPhysicsDefaultFriction());
+      if (sd.getInputProfilePath() != null) s.setInputProfilePath(sd.getInputProfilePath());
+      if (sd.getInputProfileSerialized() != null) s.setInputProfileSerialized(sd.getInputProfileSerialized());
     }
+    state.setRpgState(saveData.getRpgState());
   }
   
   private String sanitizeFileName(String name) {

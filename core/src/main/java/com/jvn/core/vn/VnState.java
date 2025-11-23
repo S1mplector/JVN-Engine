@@ -30,6 +30,7 @@ public class VnState {
   private int historyScroll = 0; // lines to scroll back from newest (0 = show newest)
   private String hudMessage;
   private long hudMessageExpireAt;
+  private Object rpgState = new com.jvn.core.rpg.RpgState(); // Optional RPG state payload (serializable)
 
   public VnState() {
     this.currentNodeIndex = 0;
@@ -161,6 +162,9 @@ public class VnState {
     this.variables.clear();
     if (vars != null) this.variables.putAll(vars);
   }
+
+  public Object getRpgState() { return rpgState; }
+  public void setRpgState(Object rpgState) { this.rpgState = rpgState; }
 
   public Set<Integer> getReadNodes() { return new HashSet<>(readNodes); }
   public void setReadNodes(Set<Integer> read) {

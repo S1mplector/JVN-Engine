@@ -11,6 +11,11 @@ public class VnSettings {
   private long autoPlayDelay = 2000; // ms to wait before auto-advancing
   private boolean skipUnreadText = false;
   private boolean skipAfterChoices = false;
+  private long physicsFixedStepMs = 0; // 0 = variable
+  private int physicsMaxSubSteps = 4;
+  private double physicsDefaultFriction = 0.2;
+  private String inputProfilePath = System.getProperty("user.home") + "/.jvn/input-bindings.properties";
+  private String inputProfileSerialized = ""; // serialized ActionBindingProfile (optional)
 
   public int getTextSpeed() { return textSpeed; }
   public void setTextSpeed(int speed) { this.textSpeed = Math.max(1, Math.min(speed, 200)); }
@@ -33,6 +38,28 @@ public class VnSettings {
   public boolean isSkipAfterChoices() { return skipAfterChoices; }
   public void setSkipAfterChoices(boolean skip) { this.skipAfterChoices = skip; }
 
+  public long getPhysicsFixedStepMs() { return physicsFixedStepMs; }
+  public void setPhysicsFixedStepMs(long ms) { this.physicsFixedStepMs = Math.max(0, ms); }
+
+  public int getPhysicsMaxSubSteps() { return physicsMaxSubSteps; }
+  public void setPhysicsMaxSubSteps(int steps) { this.physicsMaxSubSteps = Math.max(1, steps); }
+
+  public double getPhysicsDefaultFriction() { return physicsDefaultFriction; }
+  public void setPhysicsDefaultFriction(double friction) {
+    if (Double.isNaN(friction) || Double.isInfinite(friction)) friction = 0;
+    this.physicsDefaultFriction = Math.max(0.0, Math.min(1.0, friction));
+  }
+
+  public String getInputProfilePath() { return inputProfilePath; }
+  public void setInputProfilePath(String path) {
+    if (path != null && !path.isBlank()) this.inputProfilePath = path;
+  }
+
+  public String getInputProfileSerialized() { return inputProfileSerialized; }
+  public void setInputProfileSerialized(String serialized) {
+    this.inputProfileSerialized = serialized == null ? "" : serialized;
+  }
+
   public VnSettings copy() {
     VnSettings copy = new VnSettings();
     copy.textSpeed = this.textSpeed;
@@ -42,6 +69,11 @@ public class VnSettings {
     copy.autoPlayDelay = this.autoPlayDelay;
     copy.skipUnreadText = this.skipUnreadText;
     copy.skipAfterChoices = this.skipAfterChoices;
+    copy.physicsFixedStepMs = this.physicsFixedStepMs;
+    copy.physicsMaxSubSteps = this.physicsMaxSubSteps;
+    copy.physicsDefaultFriction = this.physicsDefaultFriction;
+    copy.inputProfilePath = this.inputProfilePath;
+    copy.inputProfileSerialized = this.inputProfileSerialized;
     return copy;
   }
 }

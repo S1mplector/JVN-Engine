@@ -151,6 +151,9 @@ public class JvnApp {
         }
       } catch (Exception ignored) {}
       MainMenuScene menu = new MainMenuScene(engine, settingsModel, saveManager, scriptName, audio);
+      if (settingsModel != null) {
+        engine.setFixedUpdateStepMs(settingsModel.getPhysicsFixedStepMs(), settingsModel.getPhysicsMaxSubSteps());
+      }
       engine.scenes().push(menu);
     }
 

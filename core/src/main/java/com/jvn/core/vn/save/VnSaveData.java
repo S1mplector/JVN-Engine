@@ -78,6 +78,11 @@ public class VnSaveData implements Serializable {
     private long autoPlayDelay = 2000L;
     private boolean skipUnreadText = false;
     private boolean skipAfterChoices = false;
+    private long physicsFixedStepMs = 0;
+    private int physicsMaxSubSteps = 4;
+    private double physicsDefaultFriction = 0.2;
+    private String inputProfilePath;
+    private String inputProfileSerialized;
 
     public int getTextSpeed() { return textSpeed; }
     public void setTextSpeed(int textSpeed) { this.textSpeed = textSpeed; }
@@ -93,5 +98,21 @@ public class VnSaveData implements Serializable {
     public void setSkipUnreadText(boolean skipUnreadText) { this.skipUnreadText = skipUnreadText; }
     public boolean isSkipAfterChoices() { return skipAfterChoices; }
     public void setSkipAfterChoices(boolean skipAfterChoices) { this.skipAfterChoices = skipAfterChoices; }
+    public long getPhysicsFixedStepMs() { return physicsFixedStepMs; }
+    public void setPhysicsFixedStepMs(long physicsFixedStepMs) { this.physicsFixedStepMs = physicsFixedStepMs; }
+    public int getPhysicsMaxSubSteps() { return physicsMaxSubSteps; }
+    public void setPhysicsMaxSubSteps(int physicsMaxSubSteps) { this.physicsMaxSubSteps = physicsMaxSubSteps; }
+    public double getPhysicsDefaultFriction() { return physicsDefaultFriction; }
+    public void setPhysicsDefaultFriction(double physicsDefaultFriction) { this.physicsDefaultFriction = physicsDefaultFriction; }
+    public String getInputProfilePath() { return inputProfilePath; }
+    public void setInputProfilePath(String inputProfilePath) { this.inputProfilePath = inputProfilePath; }
+    public String getInputProfileSerialized() { return inputProfileSerialized; }
+    public void setInputProfileSerialized(String inputProfileSerialized) { this.inputProfileSerialized = inputProfileSerialized; }
   }
+
+  // Optional RPG state snapshot
+  private Object rpgState;
+
+  public Object getRpgState() { return rpgState; }
+  public void setRpgState(Object rpgState) { this.rpgState = rpgState; }
 }

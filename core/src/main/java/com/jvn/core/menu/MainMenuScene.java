@@ -49,7 +49,10 @@ public class MainMenuScene implements Scene {
     switch (selected) {
       case 0 -> startNewGame();
       case 1 -> engine.scenes().push(new LoadMenuScene(engine, saveManager, defaultScriptName, settingsModel, audio));
-      case 2 -> engine.scenes().push(new SettingsScene(settingsModel, audio));
+      case 2 -> {
+        com.jvn.core.input.ActionBindingProfile profile = com.jvn.core.input.ActionBindingProfile.deserialize(settingsModel.getInputProfileSerialized());
+        engine.scenes().push(new SettingsScene(settingsModel, audio, profile));
+      }
       case 3 -> engine.stop();
     }
   }
@@ -70,10 +73,18 @@ public class MainMenuScene implements Scene {
     s.setAutoPlayDelay(settingsModel.getAutoPlayDelay());
     s.setSkipUnreadText(settingsModel.isSkipUnreadText());
     s.setSkipAfterChoices(settingsModel.isSkipAfterChoices());
+    s.setPhysicsFixedStepMs(settingsModel.getPhysicsFixedStepMs());
+    s.setPhysicsMaxSubSteps(settingsModel.getPhysicsMaxSubSteps());
+    s.setPhysicsDefaultFriction(settingsModel.getPhysicsDefaultFriction());
+    s.setInputProfilePath(settingsModel.getInputProfilePath());
+    s.setInputProfileSerialized(settingsModel.getInputProfileSerialized());
     if (audio != null) {
       audio.setBgmVolume(s.getBgmVolume());
       audio.setSfxVolume(s.getSfxVolume());
       audio.setVoiceVolume(s.getVoiceVolume());
+    }
+    if (engine != null) {
+      engine.setFixedUpdateStepMs(settingsModel.getPhysicsFixedStepMs(), settingsModel.getPhysicsMaxSubSteps());
     }
     engine.scenes().push(vnScene);
   }
