@@ -9,7 +9,7 @@ public class SceneManager {
   public void push(Scene scene) {
     if (scene == null) return;
     if (!stack.isEmpty()) {
-      stack.peek().onExit();
+      stack.peek().onPause();
     }
     stack.push(scene);
     scene.onEnter();
@@ -19,7 +19,7 @@ public class SceneManager {
     if (stack.isEmpty()) return null;
     Scene s = stack.pop();
     s.onExit();
-    if (!stack.isEmpty()) stack.peek().onEnter();
+    if (!stack.isEmpty()) stack.peek().onResume();
     return s;
   }
 

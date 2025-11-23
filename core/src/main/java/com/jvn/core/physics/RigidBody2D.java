@@ -17,6 +17,7 @@ public class RigidBody2D {
   private double restitution = 0.2; // bounciness
   private boolean sensor = false;
   private double linearDamping = 0.0; // per-second damping factor
+  private double friction = 0.2; // simple kinetic friction [0..1]
 
   public static RigidBody2D box(double x, double y, double w, double h) {
     RigidBody2D b = new RigidBody2D();
@@ -60,5 +61,13 @@ public class RigidBody2D {
   public void setLinearDamping(double damping) {
     if (Double.isNaN(damping) || Double.isInfinite(damping) || damping < 0) damping = 0;
     this.linearDamping = damping;
+  }
+
+  public double getFriction() { return friction; }
+  public void setFriction(double friction) {
+    if (Double.isNaN(friction) || Double.isInfinite(friction)) friction = 0;
+    if (friction < 0) friction = 0;
+    if (friction > 1) friction = 1;
+    this.friction = friction;
   }
 }

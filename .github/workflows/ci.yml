@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - name: Run unit tests
+        run: ./gradlew :core:test :scripting:test --no-daemon

@@ -62,5 +62,7 @@ public interface Blitter2D {
 
   // Optional text alignment; hAlign: left|center|right, vAlign: baseline|top|middle|bottom
   default void setTextAlign(String hAlign, String vAlign) {}
-}
 
+  // Optional blend mode support; mode examples: "normal", "additive", "multiply"
+  default void setBlendMode(String mode) {}
+}

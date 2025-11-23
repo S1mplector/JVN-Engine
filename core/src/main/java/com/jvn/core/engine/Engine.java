@@ -17,6 +17,9 @@ public class Engine {
   private long maxDeltaMs = 75; // clamp to avoid huge simulation jumps
   private double deltaSmoothing = 0.1; // exponential smoothing factor [0..1]; 0 disables smoothing
   private double smoothedDeltaMs = -1.0;
+  private long fixedUpdateMs = 0; // 0 = disabled
+  private int maxFixedSteps = 5;
+  private double accumulatorMs = 0.0;
 
   public Engine(ApplicationConfig config) {
     this.config = config;
@@ -45,10 +48,19 @@ public class Engine {
        input.endFrame();
        return;
      }
-     tweens.update(effective);
-     Scene current = sceneManager.peek();
-     if (current != null) {
-       current.update(effective);
+     if (fixedUpdateMs > 0) {
+       accumulatorMs += effective;
+       int steps = 0;
+       while (accumulatorMs >= fixedUpdateMs && steps < maxFixedSteps) {
+         tick(fixedUpdateMs);
+         accumulatorMs -= fixedUpdateMs;
+         steps++;
+       }
+       if (steps == maxFixedSteps && accumulatorMs > fixedUpdateMs) {
+         accumulatorMs = fixedUpdateMs;
+       }
+     } else {
+       tick(effective);
      }
      input.endFrame();
    }
@@ -75,10 +87,23 @@ public class Engine {
     this.deltaSmoothing = alpha;
   }
 
+  public void setFixedUpdateStepMs(long stepMs, int maxSteps) {
+    this.fixedUpdateMs = stepMs <= 0 ? 0 : stepMs;
+    this.maxFixedSteps = Math.max(1, maxSteps);
+  }
+
   private long clampDelta(long deltaMs) {
     if (deltaMs < 0) return 0;
     if (maxDeltaMs > 0 && deltaMs > maxDeltaMs) return maxDeltaMs;
     return deltaMs;
+  }
+
+  private void tick(long deltaMs) {
+    tweens.update(deltaMs);
+    Scene current = sceneManager.peek();
+    if (current != null) {
+      current.update(deltaMs);
+    }
   }
 
   private long smoothDelta(long deltaMs) {

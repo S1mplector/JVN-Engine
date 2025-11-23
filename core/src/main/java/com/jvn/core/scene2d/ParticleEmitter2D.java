@@ -166,10 +166,7 @@ public class ParticleEmitter2D extends Entity2D {
     if (particles.isEmpty()) return;
     
     b.push();
-    if (useAdditive) {
-      // Note: Blitter2D doesn't have blend mode support yet,
-      // but we can simulate with alpha
-    }
+    if (useAdditive) b.setBlendMode("additive");
     
     for (Particle p : particles) {
       b.push();
@@ -188,6 +185,7 @@ public class ParticleEmitter2D extends Entity2D {
       b.pop();
     }
     
+    if (useAdditive) b.setBlendMode("normal");
     b.pop();
   }
   

@@ -2,7 +2,11 @@ package com.jvn.core.physics;
 
 import com.jvn.core.math.Rect;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class PhysicsWorld2D {
   private final List<RigidBody2D> bodies = new ArrayList<>();
@@ -13,6 +17,12 @@ public class PhysicsWorld2D {
   private PhysicsSensorListener sensorListener;
   private CollisionListener collisionListener;
   private double maxStepMs = 50.0; // clamp excessively large frame steps
+  private double fixedTimeStepMs = 0.0; // optional fixed step for determinism; 0 = disabled
+  private int maxSubSteps = 8;
+  private double accumulatorMs = 0.0;
+  private int broadphaseCellSize = 128;
+  private final Map<Long, List<Integer>> broadphaseCells = new HashMap<>();
+  private final List<int[]> broadphasePairs = new ArrayList<>();
 
   public static class RaycastHit {
     public RigidBody2D body;
@@ -45,6 +55,13 @@ public class PhysicsWorld2D {
   public List<RigidBody2D> getBodies() { return bodies; }
   public void setMaxStepMs(double ms) { this.maxStepMs = ms <= 0 ? 0 : ms; }
   public double getMaxStepMs() { return maxStepMs; }
+  public void setFixedTimeStepMs(double stepMs, int maxSubSteps) {
+    this.fixedTimeStepMs = stepMs <= 0 ? 0 : stepMs;
+    this.maxSubSteps = Math.max(1, maxSubSteps);
+  }
+  public double getFixedTimeStepMs() { return fixedTimeStepMs; }
+  public void setBroadphaseCellSize(int size) { this.broadphaseCellSize = size <= 0 ? 1 : size; }
+  public int getBroadphaseCellSize() { return broadphaseCellSize; }
 
   public RaycastHit raycast(double x1, double y1, double x2, double y2) {
     double dx = x2 - x1;
@@ -69,9 +86,28 @@ public class PhysicsWorld2D {
     if (deltaMs < 0) return;
     double stepMs = deltaMs;
     if (maxStepMs > 0 && stepMs > maxStepMs) stepMs = maxStepMs;
+
+    if (fixedTimeStepMs > 0) {
+      accumulatorMs += stepMs;
+      int steps = 0;
+      while (accumulatorMs >= fixedTimeStepMs && steps < maxSubSteps) {
+        stepOnce(fixedTimeStepMs);
+        accumulatorMs -= fixedTimeStepMs;
+        steps++;
+      }
+      // Avoid unbounded accumulation if frame time explodes
+      if (steps == maxSubSteps && accumulatorMs > fixedTimeStepMs) {
+        accumulatorMs = fixedTimeStepMs;
+      }
+    } else {
+      stepOnce(stepMs);
+    }
+  }
+
+  private void stepOnce(double stepMs) {
     double dt = stepMs / 1000.0;
     if (dt <= 0) return;
-    // Integrate velocities and apply gravity
+
     for (RigidBody2D b : bodies) {
       if (b.isStatic()) continue;
       b.setVelocity(b.getVx() + gravityX * dt, b.getVy() + gravityY * dt);
@@ -86,184 +122,359 @@ public class PhysicsWorld2D {
       resolveStaticColliders(b);
     }
 
-    // Naive pairwise collision resolution
-    int n = bodies.size();
-    for (int i = 0; i < n; i++) {
-      for (int j = i + 1; j < n; j++) {
-        RigidBody2D a = bodies.get(i);
-        RigidBody2D c = bodies.get(j);
-        if (a.isSensor() || c.isSensor()) { handleSensor(a, c); }
-        else { resolveCollision(a, c); }
+    for (int[] pair : gatherPairs()) {
+      RigidBody2D a = bodies.get(pair[0]);
+      RigidBody2D b = bodies.get(pair[1]);
+      CollisionInfo info = findCollision(a, b);
+      if (info == null) continue;
+      if (a.isSensor() || b.isSensor()) {
+        handleSensor(a, b, info);
+        continue;
+      }
+      applyCollisionResponse(a, b, info);
+    }
+  }
+
+  private List<int[]> gatherPairs() {
+    broadphasePairs.clear();
+    broadphaseCells.clear();
+    for (int i = 0; i < bodies.size(); i++) {
+      Bounds bb = computeBounds(bodies.get(i));
+      int minCx = (int) Math.floor(bb.minX / broadphaseCellSize);
+      int maxCx = (int) Math.floor(bb.maxX / broadphaseCellSize);
+      int minCy = (int) Math.floor(bb.minY / broadphaseCellSize);
+      int maxCy = (int) Math.floor(bb.maxY / broadphaseCellSize);
+      for (int cx = minCx; cx <= maxCx; cx++) {
+        for (int cy = minCy; cy <= maxCy; cy++) {
+          long key = hashCell(cx, cy);
+          broadphaseCells.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
+        }
       }
     }
+    Set<Long> seen = new HashSet<>();
+    for (List<Integer> bucket : broadphaseCells.values()) {
+      int n = bucket.size();
+      if (n < 2) continue;
+      for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+          int a = bucket.get(i);
+          int b = bucket.get(j);
+          long key = pairKey(a, b);
+          if (seen.add(key)) broadphasePairs.add(new int[] {a, b});
+        }
+      }
+    }
+    return broadphasePairs;
+  }
+
+  private Bounds computeBounds(RigidBody2D b) {
+    Bounds out = new Bounds();
+    if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
+      var c = b.getCircle();
+      out.minX = c.x - c.r;
+      out.maxX = c.x + c.r;
+      out.minY = c.y - c.r;
+      out.maxY = c.y + c.r;
+    } else {
+      var r = b.getAabb();
+      out.minX = r.left();
+      out.maxX = r.right();
+      out.minY = r.top();
+      out.maxY = r.bottom();
+    }
+    return out;
+  }
+
+  private CollisionInfo findCollision(RigidBody2D a, RigidBody2D b) {
+    if (a.getShapeType() == RigidBody2D.ShapeType.CIRCLE && b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
+      return collideCircleCircle(a, b);
+    } else if (a.getShapeType() == RigidBody2D.ShapeType.AABB && b.getShapeType() == RigidBody2D.ShapeType.AABB) {
+      return collideAabbAabb(a, b);
+    } else if (a.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
+      return collideCircleAabb(a, b, true);
+    } else {
+      CollisionInfo info = collideCircleAabb(b, a, true);
+      if (info != null) {
+        // Flip normal to keep orientation from a -> b
+        info.nx = -info.nx;
+        info.ny = -info.ny;
+      }
+      return info;
+    }
+  }
+
+  private CollisionInfo collideCircleCircle(RigidBody2D a, RigidBody2D b) {
+    var ca = a.getCircle();
+    var cb = b.getCircle();
+    double dx = cb.x - ca.x;
+    double dy = cb.y - ca.y;
+    double dist2 = dx * dx + dy * dy;
+    double rsum = ca.r + cb.r;
+    if (dist2 >= rsum * rsum) return null;
+    double dist = Math.sqrt(Math.max(1e-9, dist2));
+    CollisionInfo info = new CollisionInfo();
+    if (dist > 1e-6) {
+      info.nx = dx / dist;
+      info.ny = dy / dist;
+      info.penetration = rsum - dist;
+    } else {
+      info.nx = 1;
+      info.ny = 0;
+      info.penetration = rsum;
+    }
+    return info;
+  }
+
+  private CollisionInfo collideAabbAabb(RigidBody2D a, RigidBody2D b) {
+    Rect ra = a.getAabb();
+    Rect rb = b.getAabb();
+    if (!ra.intersects(rb)) return null;
+    double overlapX1 = ra.right() - rb.left();
+    double overlapX2 = rb.right() - ra.left();
+    double overlapY1 = ra.bottom() - rb.top();
+    double overlapY2 = rb.bottom() - ra.top();
+    double minOverlapX = Math.min(overlapX1, overlapX2);
+    double minOverlapY = Math.min(overlapY1, overlapY2);
+
+    CollisionInfo info = new CollisionInfo();
+    if (minOverlapX < minOverlapY) {
+      double dir = (overlapX1 < overlapX2) ? -1 : 1; // normal from a to b
+      info.nx = dir;
+      info.ny = 0;
+      info.penetration = minOverlapX;
+    } else {
+      double dir = (overlapY1 < overlapY2) ? -1 : 1;
+      info.nx = 0;
+      info.ny = dir;
+      info.penetration = minOverlapY;
+    }
+    return info;
+  }
+
+  private CollisionInfo collideCircleAabb(RigidBody2D circleBody, RigidBody2D boxBody, boolean circleFirst) {
+    var c = circleBody.getCircle();
+    var r = boxBody.getAabb();
+    double closestX = clamp(c.x, r.left(), r.right());
+    double closestY = clamp(c.y, r.top(), r.bottom());
+    double dx = closestX - c.x;
+    double dy = closestY - c.y;
+    double dist2 = dx * dx + dy * dy;
+    double radius = c.r;
+    if (dist2 > radius * radius) return null;
+    CollisionInfo info = new CollisionInfo();
+    if (dist2 > 1e-9) {
+      double dist = Math.sqrt(dist2);
+      double nx = -dx / dist; // from circle toward box
+      double ny = -dy / dist;
+      info.nx = circleFirst ? nx : -nx;
+      info.ny = circleFirst ? ny : -ny;
+      info.penetration = radius - dist;
+    } else {
+      // Circle center inside box; push out via shallowest axis
+      double leftPen = c.x - r.left();
+      double rightPen = r.right() - c.x;
+      double topPen = c.y - r.top();
+      double bottomPen = r.bottom() - c.y;
+      double minPen = Math.min(Math.min(leftPen, rightPen), Math.min(topPen, bottomPen));
+      double nx = 0, ny = 0;
+      if (minPen == leftPen) nx = 1;
+      else if (minPen == rightPen) nx = -1;
+      else if (minPen == topPen) ny = 1;
+      else ny = -1;
+      info.nx = circleFirst ? nx : -nx;
+      info.ny = circleFirst ? ny : -ny;
+      info.penetration = minPen;
+    }
+    return info;
+  }
+
+  private void applyCollisionResponse(RigidBody2D a, RigidBody2D b, CollisionInfo info) {
+    if (a.isStatic() && b.isStatic()) return;
+    double invMassA = a.isStatic() ? 0 : 1.0 / a.getMass();
+    double invMassB = b.isStatic() ? 0 : 1.0 / b.getMass();
+    double invMassSum = invMassA + invMassB;
+    if (invMassSum <= 0) return;
+
+    // Positional correction
+    double penetration = info.penetration;
+    double moveA = invMassA / invMassSum * penetration;
+    double moveB = invMassB / invMassSum * penetration;
+    double nx = info.nx;
+    double ny = info.ny;
+    if (!a.isStatic()) a.setPosition(a.getX() - nx * moveA, a.getY() - ny * moveA);
+    if (!b.isStatic()) b.setPosition(b.getX() + nx * moveB, b.getY() + ny * moveB);
+
+    // Velocity response (impulse)
+    double rvx = b.getVx() - a.getVx();
+    double rvy = b.getVy() - a.getVy();
+    double relVel = rvx * nx + rvy * ny;
+    if (relVel < 0) {
+      double restitution = Math.min(a.getRestitution(), b.getRestitution());
+      double j = -(1 + restitution) * relVel / invMassSum;
+      double ix = j * nx;
+      double iy = j * ny;
+      if (!a.isStatic()) a.setVelocity(a.getVx() - ix * invMassA, a.getVy() - iy * invMassA);
+      if (!b.isStatic()) b.setVelocity(b.getVx() + ix * invMassB, b.getVy() + iy * invMassB);
+    }
+
+    applyFriction(a, b, nx, ny, invMassSum);
+    if (collisionListener != null) collisionListener.onBodiesCollide(a, b, nx, ny);
+  }
+
+  private void applyFriction(RigidBody2D a, RigidBody2D b, double nx, double ny, double invMassSum) {
+    double rvx = b.getVx() - a.getVx();
+    double rvy = b.getVy() - a.getVy();
+    double relNormal = rvx * nx + rvy * ny;
+    double tx = rvx - relNormal * nx;
+    double ty = rvy - relNormal * ny;
+    double tLen = Math.sqrt(tx * tx + ty * ty);
+    if (tLen < 1e-6) return;
+    tx /= tLen;
+    ty /= tLen;
+    double friction = Math.max(a.getFriction(), b.getFriction());
+    if (friction <= 0) return;
+    double jt = -(tLen) * friction / invMassSum;
+    double ix = jt * tx;
+    double iy = jt * ty;
+    double invMassA = a.isStatic() ? 0 : 1.0 / a.getMass();
+    double invMassB = b.isStatic() ? 0 : 1.0 / b.getMass();
+    if (!a.isStatic()) a.setVelocity(a.getVx() - ix * invMassA, a.getVy() - iy * invMassA);
+    if (!b.isStatic()) b.setVelocity(b.getVx() + ix * invMassB, b.getVy() + iy * invMassB);
+  }
+
+  private static class CollisionInfo {
+    double nx;
+    double ny;
+    double penetration;
+  }
+
+  private static class Bounds {
+    double minX, minY, maxX, maxY;
+  }
+
+  private long hashCell(int cx, int cy) {
+    return (((long) cx) << 32) ^ (cy & 0xffffffffL);
+  }
+
+  private long pairKey(int a, int b) {
+    int lo = Math.min(a, b);
+    int hi = Math.max(a, b);
+    return (((long) lo) << 32) ^ (hi & 0xffffffffL);
+  }
+
+  private double clamp(double v, double min, double max) {
+    return v < min ? min : Math.min(v, max);
   }
 
   private void resolveWorldBounds(RigidBody2D b) {
     if (bounds == null) return;
     if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
       var cir = b.getCircle();
-      if (cir.x - cir.r < bounds.left()) { cir.x = bounds.left() + cir.r; b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
-      if (cir.x + cir.r > bounds.right()) { cir.x = bounds.right() - cir.r; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
-      if (cir.y - cir.r < bounds.top()) { cir.y = bounds.top() + cir.r; b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
-      if (cir.y + cir.r > bounds.bottom()) { cir.y = bounds.bottom() - cir.r; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
+      if (cir.x - cir.r < bounds.left()) { cir.x = bounds.left() + cir.r; reflectVelocityAlong(b, 1, 0); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
+      if (cir.x + cir.r > bounds.right()) { cir.x = bounds.right() - cir.r; reflectVelocityAlong(b, -1, 0); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
+      if (cir.y - cir.r < bounds.top()) { cir.y = bounds.top() + cir.r; reflectVelocityAlong(b, 0, 1); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
+      if (cir.y + cir.r > bounds.bottom()) { cir.y = bounds.bottom() - cir.r; reflectVelocityAlong(b, 0, -1); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
     } else {
       var r = b.getAabb();
-      if (r.left() < bounds.left()) { r.x = bounds.left(); b.setVelocity(Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
-      if (r.right() > bounds.right()) { r.x = bounds.right() - r.w; b.setVelocity(-Math.abs(b.getVx()) * b.getRestitution(), b.getVy()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
-      if (r.top() < bounds.top()) { r.y = bounds.top(); b.setVelocity(b.getVx(), Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
-      if (r.bottom() > bounds.bottom()) { r.y = bounds.bottom() - r.h; b.setVelocity(b.getVx(), -Math.abs(b.getVy()) * b.getRestitution()); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
+      if (r.left() < bounds.left()) { r.x = bounds.left(); reflectVelocityAlong(b, 1, 0); if (collisionListener != null) collisionListener.onBoundsCollide(b, "left"); }
+      if (r.right() > bounds.right()) { r.x = bounds.right() - r.w; reflectVelocityAlong(b, -1, 0); if (collisionListener != null) collisionListener.onBoundsCollide(b, "right"); }
+      if (r.top() < bounds.top()) { r.y = bounds.top(); reflectVelocityAlong(b, 0, 1); if (collisionListener != null) collisionListener.onBoundsCollide(b, "top"); }
+      if (r.bottom() > bounds.bottom()) { r.y = bounds.bottom() - r.h; reflectVelocityAlong(b, 0, -1); if (collisionListener != null) collisionListener.onBoundsCollide(b, "bottom"); }
     }
   }
 
   private void resolveStaticColliders(RigidBody2D b) {
     if (b.isStatic() || b.isSensor()) return;
     for (Rect tile : staticRects) {
-      if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
-        // Approximate circle as AABB for simple resolution
-        Rect r = new Rect(b.getCircle().x - b.getCircle().r, b.getCircle().y - b.getCircle().r, b.getCircle().r * 2, b.getCircle().r * 2);
-        if (!r.intersects(tile)) continue;
-        // Push out like AABB
-        double overlapX1 = r.right() - tile.left();
-        double overlapX2 = tile.right() - r.left();
-        double overlapY1 = r.bottom() - tile.top();
-        double overlapY2 = tile.bottom() - r.top();
-        double minOverlapX = Math.min(overlapX1, overlapX2);
-        double minOverlapY = Math.min(overlapY1, overlapY2);
-        if (minOverlapX < minOverlapY) {
-          double dir = (overlapX1 < overlapX2) ? 1 : -1;
-          b.setPosition(b.getX() - dir * minOverlapX, b.getY());
-          b.setVelocity(-dir * Math.abs(b.getVx()) * b.getRestitution(), b.getVy());
-          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, dir, 0);
-        } else {
-          double dir = (overlapY1 < overlapY2) ? 1 : -1;
-          b.setPosition(b.getX(), b.getY() - dir * minOverlapY);
-          b.setVelocity(b.getVx(), -dir * Math.abs(b.getVy()) * b.getRestitution());
-          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, 0, dir);
-        }
-      } else {
-        Rect r = b.getAabb();
-        if (!r.intersects(tile)) continue;
-        double overlapX1 = r.right() - tile.left();
-        double overlapX2 = tile.right() - r.left();
-        double overlapY1 = r.bottom() - tile.top();
-        double overlapY2 = tile.bottom() - r.top();
-        double minOverlapX = Math.min(overlapX1, overlapX2);
-        double minOverlapY = Math.min(overlapY1, overlapY2);
-        if (minOverlapX < minOverlapY) {
-          double dir = (overlapX1 < overlapX2) ? 1 : -1;
-          r.x -= dir * minOverlapX;
-          b.setVelocity(-dir * Math.abs(b.getVx()) * b.getRestitution(), b.getVy());
-          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, dir, 0);
-        } else {
-          double dir = (overlapY1 < overlapY2) ? 1 : -1;
-          r.y -= dir * minOverlapY;
-          b.setVelocity(b.getVx(), -dir * Math.abs(b.getVy()) * b.getRestitution());
-          if (collisionListener != null) collisionListener.onStaticCollide(b, tile, 0, dir);
-        }
-      }
+      if (b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) resolveStaticCircle(b, tile);
+      else resolveStaticAabb(b, tile);
     }
   }
 
-  private void resolveCollision(RigidBody2D a, RigidBody2D b) {
-    if (a.isStatic() && b.isStatic()) return;
-    if (a.getShapeType() == RigidBody2D.ShapeType.CIRCLE && b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
-      resolveCircleCircle(a, b);
-    } else if (a.getShapeType() == RigidBody2D.ShapeType.AABB && b.getShapeType() == RigidBody2D.ShapeType.AABB) {
-      resolveAabbAabb(a, b);
-    } else {
-      // Simplified circle/AABB: treat circle as AABB
-      resolveAabbAabb(a, b);
-    }
-  }
-
-  private void resolveCircleCircle(RigidBody2D ra, RigidBody2D rb) {
-    var a = ra.getCircle();
-    var b = rb.getCircle();
-    double dx = b.x - a.x;
-    double dy = b.y - a.y;
+  private void resolveStaticCircle(RigidBody2D body, Rect tile) {
+    var c = body.getCircle();
+    double closestX = clamp(c.x, tile.left(), tile.right());
+    double closestY = clamp(c.y, tile.top(), tile.bottom());
+    double dx = closestX - c.x;
+    double dy = closestY - c.y;
     double dist2 = dx * dx + dy * dy;
-    double rsum = a.r + b.r;
-    if (dist2 >= rsum * rsum || dist2 == 0) return;
-    double dist = Math.sqrt(dist2);
-    double nx = dx / dist;
-    double ny = dy / dist;
-    double penetration = rsum - dist;
-
-    double totalMass = (ra.isStatic() ? 0 : ra.getMass()) + (rb.isStatic() ? 0 : rb.getMass());
-    if (totalMass == 0) totalMass = 1;
-    double moveA = rb.isStatic() ? 0 : (penetration * (rb.getMass() / totalMass));
-    double moveB = ra.isStatic() ? 0 : (penetration * (ra.getMass() / totalMass));
-
-    // Separate
-    if (!ra.isStatic()) ra.setPosition(a.x - nx * moveA, a.y - ny * moveA);
-    if (!rb.isStatic()) rb.setPosition(b.x + nx * moveB, b.y + ny * moveB);
-
-    // Reflect velocities along normal
-    double vaN = ra.getVx() * nx + ra.getVy() * ny;
-    double vbN = rb.getVx() * nx + rb.getVy() * ny;
-    double restitution = Math.min(ra.getRestitution(), rb.getRestitution());
-
-    double m1 = ra.isStatic() ? Double.POSITIVE_INFINITY : ra.getMass();
-    double m2 = rb.isStatic() ? Double.POSITIVE_INFINITY : rb.getMass();
-
-    // 1D elastic collision along normal with restitution
-    double newVaN = (vaN * (m1 - restitution * m2) + (1 + restitution) * m2 * vbN) / (m1 + m2);
-    double newVbN = (vbN * (m2 - restitution * m1) + (1 + restitution) * m1 * vaN) / (m1 + m2);
-
-    double dvA = newVaN - vaN;
-    double dvB = newVbN - vbN;
-
-    ra.setVelocity(ra.getVx() + dvA * nx, ra.getVy() + dvA * ny);
-    rb.setVelocity(rb.getVx() + dvB * nx, rb.getVy() + dvB * ny);
-    if (collisionListener != null) collisionListener.onBodiesCollide(ra, rb, nx, ny);
+    double r = c.r;
+    if (dist2 > r * r) return;
+    double nx, ny, penetration;
+    if (dist2 > 1e-9) {
+      double dist = Math.sqrt(dist2);
+      nx = -dx / dist;
+      ny = -dy / dist;
+      penetration = r - dist;
+    } else {
+      double leftPen = c.x - tile.left();
+      double rightPen = tile.right() - c.x;
+      double topPen = c.y - tile.top();
+      double bottomPen = tile.bottom() - c.y;
+      penetration = Math.min(Math.min(leftPen, rightPen), Math.min(topPen, bottomPen));
+      if (penetration == leftPen) { nx = 1; ny = 0; }
+      else if (penetration == rightPen) { nx = -1; ny = 0; }
+      else if (penetration == topPen) { nx = 0; ny = 1; }
+      else { nx = 0; ny = -1; }
+    }
+    body.setPosition(body.getX() - nx * penetration, body.getY() - ny * penetration);
+    reflectVelocityAlong(body, nx, ny);
+    applyStaticFriction(body, nx, ny);
+    if (collisionListener != null) collisionListener.onStaticCollide(body, tile, nx, ny);
   }
 
-  private void resolveAabbAabb(RigidBody2D a, RigidBody2D b) {
-    var ra = a.getAabb();
-    var rb = b.getAabb();
-    if (!ra.intersects(rb)) return;
-
-    double overlapX1 = ra.right() - rb.left();
-    double overlapX2 = rb.right() - ra.left();
-    double overlapY1 = ra.bottom() - rb.top();
-    double overlapY2 = rb.bottom() - ra.top();
-
+  private void resolveStaticAabb(RigidBody2D body, Rect tile) {
+    Rect r = body.getAabb();
+    if (!r.intersects(tile)) return;
+    double overlapX1 = r.right() - tile.left();
+    double overlapX2 = tile.right() - r.left();
+    double overlapY1 = r.bottom() - tile.top();
+    double overlapY2 = tile.bottom() - r.top();
     double minOverlapX = Math.min(overlapX1, overlapX2);
     double minOverlapY = Math.min(overlapY1, overlapY2);
-
-    double nx = 0, ny = 0, penetration;
+    double nx, ny, penetration;
     if (minOverlapX < minOverlapY) {
       penetration = minOverlapX;
       nx = (overlapX1 < overlapX2) ? 1 : -1;
+      ny = 0;
     } else {
       penetration = minOverlapY;
       ny = (overlapY1 < overlapY2) ? 1 : -1;
+      nx = 0;
     }
+    r.x -= nx * penetration;
+    r.y -= ny * penetration;
+    reflectVelocityAlong(body, nx, ny);
+    applyStaticFriction(body, nx, ny);
+    if (collisionListener != null) collisionListener.onStaticCollide(body, tile, nx, ny);
+  }
 
-    double totalMass = (a.isStatic() ? 0 : a.getMass()) + (b.isStatic() ? 0 : b.getMass());
-    if (totalMass == 0) totalMass = 1;
-    double moveA = b.isStatic() ? 0 : (penetration * (b.getMass() / totalMass));
-    double moveB = a.isStatic() ? 0 : (penetration * (a.getMass() / totalMass));
+  private void reflectVelocityAlong(RigidBody2D body, double nx, double ny) {
+    double vn = body.getVx() * nx + body.getVy() * ny;
+    double rx = body.getVx() - (1 + body.getRestitution()) * vn * nx;
+    double ry = body.getVy() - (1 + body.getRestitution()) * vn * ny;
+    body.setVelocity(rx, ry);
+  }
 
-    if (!a.isStatic()) a.setPosition(a.getX() - nx * moveA, a.getY() - ny * moveA);
-    if (!b.isStatic()) b.setPosition(b.getX() + nx * moveB, b.getY() + ny * moveB);
+  private void applyStaticFriction(RigidBody2D body, double nx, double ny) {
+    double vx = body.getVx();
+    double vy = body.getVy();
+    double normal = vx * nx + vy * ny;
+    double tx = vx - normal * nx;
+    double ty = vy - normal * ny;
+    double tLen = Math.sqrt(tx * tx + ty * ty);
+    if (tLen < 1e-6) return;
+    double friction = body.getFriction();
+    double scale = Math.max(0, 1.0 - friction);
+    double finalVx = normal * nx + tx * scale;
+    double finalVy = normal * ny + ty * scale;
+    body.setVelocity(finalVx, finalVy);
+  }
 
-    double vaN = a.getVx() * nx + a.getVy() * ny;
-    double vbN = b.getVx() * nx + b.getVy() * ny;
-    double restitution = Math.min(a.getRestitution(), b.getRestitution());
-
-    double m1 = a.isStatic() ? Double.POSITIVE_INFINITY : a.getMass();
-    double m2 = b.isStatic() ? Double.POSITIVE_INFINITY : b.getMass();
-
-    double newVaN = (vaN * (m1 - restitution * m2) + (1 + restitution) * m2 * vbN) / (m1 + m2);
-    double newVbN = (vbN * (m2 - restitution * m1) + (1 + restitution) * m1 * vaN) / (m1 + m2);
-
-    double dvA = newVaN - vaN;
-    double dvB = newVbN - vbN;
-
-    a.setVelocity(a.getVx() + dvA * nx, a.getVy() + dvA * ny);
-    b.setVelocity(b.getVx() + dvB * nx, b.getVy() + dvB * ny);
-    if (collisionListener != null) collisionListener.onBodiesCollide(a, b, nx, ny);
+  private void handleSensor(RigidBody2D a, RigidBody2D b, CollisionInfo info) {
+    if (sensorListener == null || info == null) return;
+    if (a.isSensor() && !b.isSensor()) sensorListener.onTrigger(a, b);
+    if (b.isSensor() && !a.isSensor()) sensorListener.onTrigger(b, a);
   }
 
   private RaycastHit raycastCircle(RigidBody2D body, double sx, double sy, double dx, double dy, double segLen) {
@@ -349,22 +560,4 @@ public class PhysicsWorld2D {
     return hit;
   }
 
-  private void handleSensor(RigidBody2D a, RigidBody2D b) {
-    if (sensorListener == null) return;
-    boolean hit;
-    if (a.getShapeType() == RigidBody2D.ShapeType.CIRCLE && b.getShapeType() == RigidBody2D.ShapeType.CIRCLE) {
-      double dx = b.getCircle().x - a.getCircle().x;
-      double dy = b.getCircle().y - a.getCircle().y;
-      double rsum = a.getCircle().r + b.getCircle().r;
-      hit = (dx * dx + dy * dy) <= rsum * rsum;
-    } else {
-      Rect ra = (a.getShapeType() == RigidBody2D.ShapeType.AABB) ? a.getAabb() : new Rect(a.getCircle().x - a.getCircle().r, a.getCircle().y - a.getCircle().r, a.getCircle().r * 2, a.getCircle().r * 2);
-      Rect rb = (b.getShapeType() == RigidBody2D.ShapeType.AABB) ? b.getAabb() : new Rect(b.getCircle().x - b.getCircle().r, b.getCircle().y - b.getCircle().r, b.getCircle().r * 2, b.getCircle().r * 2);
-      hit = ra.intersects(rb);
-    }
-    if (hit) {
-      if (a.isSensor() && !b.isSensor()) sensorListener.onTrigger(a, b);
-      if (b.isSensor() && !a.isSensor()) sensorListener.onTrigger(b, a);
-    }
-  }
 }

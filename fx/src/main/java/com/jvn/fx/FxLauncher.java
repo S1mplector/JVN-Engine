@@ -13,6 +13,7 @@ import com.jvn.fx.menu.MenuTheme;
 import com.jvn.core.scene2d.Scene2D;
 import com.jvn.fx.scene2d.FxBlitter2D;
 import com.jvn.core.scene2d.Scene2DBase;
+import com.jvn.fx.render.FxSceneRendererRegistry;
 import com.jvn.core.graphics.Camera2D;
 import com.jvn.core.graphics.ViewportScaler2D;
 import com.jvn.core.demo.Example2DScene;
@@ -44,6 +45,7 @@ public class FxLauncher extends Application {
   private VnRenderer vnRenderer;
   private MenuRenderer menuRenderer;
   private FxBlitter2D blitter2D;
+  private FxSceneRendererRegistry rendererRegistry;
   private double mouseX = 0;
   private double mouseY = 0;
 
@@ -93,6 +95,7 @@ public class FxLauncher extends Application {
     this.vnRenderer = new VnRenderer(gc);
     this.menuRenderer = new MenuRenderer(gc, MenuTheme.fromAssets());
     this.blitter2D = new FxBlitter2D(gc);
+    this.rendererRegistry = createRendererRegistry();
     scene.widthProperty().addListener((obs, ov, nv) -> this.canvas.setWidth(nv.doubleValue()));
     scene.heightProperty().addListener((obs, ov, nv) -> this.canvas.setHeight(nv.doubleValue()));
 
@@ -295,34 +298,10 @@ public class FxLauncher extends Application {
           double w = canvas.getWidth();
           double h = canvas.getHeight();
 
-          // Check if current scene is a VN scene
           com.jvn.core.scene.Scene currentScene = engine != null ? engine.scenes().peek() : null;
-          if (currentScene instanceof VnScene vnScene) {
-            vnRenderer.render(vnScene.getState(), vnScene.getScenario(), w, h, mouseX, mouseY);
-          } else if (currentScene instanceof Scene2D scene2D) {
-            blitter2D.setViewport(w, h);
-            blitter2D.clear(0, 0, 0, 1); // cover full window, bars included
-            if (currentScene instanceof Scene2DBase s2db) {
-              if (engine != null) s2db.setInput(engine.input());
-              if (s2db.getCamera() == null) s2db.setCamera(new Camera2D());
-            }
-            double targetW = (engine != null && engine.getConfig() != null) ? engine.getConfig().width() : w;
-            double targetH = (engine != null && engine.getConfig() != null) ? engine.getConfig().height() : h;
-            var vp = ViewportScaler2D.fit(targetW, targetH, w, h);
-            blitter2D.push();
-            blitter2D.translate(vp.offsetX(), vp.offsetY());
-            blitter2D.scale(vp.scale(), vp.scale());
-            scene2D.render(blitter2D, vp.targetWidth(), vp.targetHeight());
-            blitter2D.pop();
-          } else if (currentScene instanceof MainMenuScene main) {
-            menuRenderer.renderMainMenu(main, w, h);
-          } else if (currentScene instanceof LoadMenuScene load) {
-            menuRenderer.renderLoadMenu(load, w, h);
-          } else if (currentScene instanceof SettingsScene settings) {
-            menuRenderer.renderSettings(settings, w, h);
-          } else if (currentScene instanceof SaveMenuScene save) {
-            menuRenderer.renderSaveMenu(save, w, h);
-          } else {
+          boolean rendered = rendererRegistry != null
+              && rendererRegistry.render(currentScene, new com.jvn.fx.render.FxSceneRendererRegistry.RenderContext(gc, blitter2D, w, h, mouseX, mouseY));
+          if (!rendered) {
             // Default render: clear and draw title text
             gc.setFill(Color.BLACK);
             gc.fillRect(0, 0, w, h);
@@ -334,6 +313,38 @@ public class FxLauncher extends Application {
       }
     };
     timer.start();
+  }
+
+  private FxSceneRendererRegistry createRendererRegistry() {
+    FxSceneRendererRegistry reg = new FxSceneRendererRegistry();
+    reg.register(VnScene.class, (vn, ctx) ->
+        vnRenderer.render(vn.getState(), vn.getScenario(), ctx.width(), ctx.height(), mouseX, mouseY));
+
+    reg.register(MainMenuScene.class, (scene, ctx) -> menuRenderer.renderMainMenu(scene, ctx.width(), ctx.height()));
+    reg.register(LoadMenuScene.class, (scene, ctx) -> menuRenderer.renderLoadMenu(scene, ctx.width(), ctx.height()));
+    reg.register(SettingsScene.class, (scene, ctx) -> menuRenderer.renderSettings(scene, ctx.width(), ctx.height()));
+    reg.register(SaveMenuScene.class, (scene, ctx) -> menuRenderer.renderSaveMenu(scene, ctx.width(), ctx.height()));
+
+    reg.register(Scene2D.class, (scene2D, ctx) -> {
+      double w = ctx.width();
+      double h = ctx.height();
+      FxBlitter2D b = ctx.blitter();
+      b.setViewport(w, h);
+      b.clear(0, 0, 0, 1);
+      if (scene2D instanceof Scene2DBase s2db) {
+        if (engine != null) s2db.setInput(engine.input());
+        if (s2db.getCamera() == null) s2db.setCamera(new Camera2D());
+      }
+      double targetW = (engine != null && engine.getConfig() != null) ? engine.getConfig().width() : w;
+      double targetH = (engine != null && engine.getConfig() != null) ? engine.getConfig().height() : h;
+      var vp = ViewportScaler2D.fit(targetW, targetH, w, h);
+      b.push();
+      b.translate(vp.offsetX(), vp.offsetY());
+      b.scale(vp.scale(), vp.scale());
+      scene2D.render(b, vp.targetWidth(), vp.targetHeight());
+      b.pop();
+    });
+    return reg;
   }
 
   private void handleAdvance() {

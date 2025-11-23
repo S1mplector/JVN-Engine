@@ -6,9 +6,12 @@ import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.effect.BlendMode;
+import javafx.geometry.VPos;
+import javafx.scene.text.TextAlignment;
 
 import java.net.URL;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
@@ -17,7 +20,10 @@ public class FxBlitter2D implements Blitter2D {
   private final GraphicsContext gc;
   private double viewportW = 0;
   private double viewportH = 0;
-  private final Map<String, Image> cache = new HashMap<>();
+  private int cacheCapacity = 128;
+  private final Map<String, Image> cache = new LinkedHashMap<>(16, 0.75f, true) {
+    @Override protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) { return size() > cacheCapacity; }
+  };
   private final Set<String> missing = new HashSet<>();
 
   public FxBlitter2D(GraphicsContext gc) {
@@ -136,6 +142,55 @@ public class FxBlitter2D implements Blitter2D {
     t.setFont(Font.font(fam, bold ? FontWeight.BOLD : FontWeight.NORMAL, size));
     return t.getLayoutBounds().getWidth();
   }
+
+  @Override
+  public void setClipRect(double x, double y, double w, double h) {
+    gc.beginPath();
+    gc.rect(x, y, w, h);
+    gc.closePath();
+    gc.clip();
+  }
+
+  @Override
+  public void setTextAlign(String hAlign, String vAlign) {
+    if (hAlign != null) {
+      switch (hAlign.toLowerCase()) {
+        case "center" -> gc.setTextAlign(TextAlignment.CENTER);
+        case "right" -> gc.setTextAlign(TextAlignment.RIGHT);
+        default -> gc.setTextAlign(TextAlignment.LEFT);
+      }
+    }
+    if (vAlign != null) {
+      switch (vAlign.toLowerCase()) {
+        case "top" -> gc.setTextBaseline(VPos.TOP);
+        case "middle" -> gc.setTextBaseline(VPos.CENTER);
+        case "bottom" -> gc.setTextBaseline(VPos.BOTTOM);
+        default -> gc.setTextBaseline(VPos.BASELINE);
+      }
+    }
+  }
+
+  @Override
+  public void setBlendMode(String mode) {
+    if (mode == null || mode.isBlank()) {
+      gc.setGlobalBlendMode(BlendMode.SRC_OVER);
+      return;
+    }
+    switch (mode.toLowerCase()) {
+      case "add": case "additive":
+        gc.setGlobalBlendMode(BlendMode.ADD); break;
+      case "multiply":
+        gc.setGlobalBlendMode(BlendMode.MULTIPLY); break;
+      case "screen":
+        gc.setGlobalBlendMode(BlendMode.SCREEN); break;
+      default:
+        gc.setGlobalBlendMode(BlendMode.SRC_OVER);
+    }
+  }
+
+  public void setCacheCapacity(int capacity) { this.cacheCapacity = Math.max(16, capacity); }
+  public void evict(String path) { if (path != null) { cache.remove(path); missing.remove(path); } }
+  public void clearCache() { cache.clear(); missing.clear(); }
 
   private Image loadImage(String path) {
     try {

@@ -1,16 +1,15 @@
 package com.jvn.core.input;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class Input {
-  private final Set<String> downKeys = new HashSet<>();
-  private final Set<String> pressedKeys = new HashSet<>();
-  private final Set<String> releasedKeys = new HashSet<>();
-
-  private final Set<Integer> downButtons = new HashSet<>();
-  private final Set<Integer> pressedButtons = new HashSet<>();
-  private final Set<Integer> releasedButtons = new HashSet<>();
+  private final Set<InputCode> down = new HashSet<>();
+  private final Set<InputCode> pressed = new HashSet<>();
+  private final Set<InputCode> released = new HashSet<>();
+  private final Map<InputCode, Double> axisValues = new HashMap<>();
 
   private double mouseX;
   private double mouseY;
@@ -18,24 +17,51 @@ public class Input {
 
   public void keyDown(String key) {
     if (key == null) return;
-    if (downKeys.add(key)) pressedKeys.add(key);
+    keyDown(InputCode.key(key));
+  }
+
+  public void keyDown(InputCode code) {
+    if (code == null) return;
+    if (down.add(code)) pressed.add(code);
   }
 
   public void keyUp(String key) {
     if (key == null) return;
-    if (downKeys.remove(key)) releasedKeys.add(key);
+    keyUp(InputCode.key(key));
   }
 
-  public boolean isKeyDown(String key) { return downKeys.contains(key); }
-  public boolean wasKeyPressed(String key) { return pressedKeys.contains(key); }
-  public boolean wasKeyReleased(String key) { return releasedKeys.contains(key); }
+  public void keyUp(InputCode code) {
+    if (code == null) return;
+    if (down.remove(code)) released.add(code);
+  }
 
-  public void mouseDown(int button) { if (downButtons.add(button)) pressedButtons.add(button); }
-  public void mouseUp(int button) { if (downButtons.remove(button)) releasedButtons.add(button); }
+  public boolean isKeyDown(String key) { return isDown(InputCode.key(key)); }
+  public boolean wasKeyPressed(String key) { return wasPressed(InputCode.key(key)); }
+  public boolean wasKeyReleased(String key) { return wasReleased(InputCode.key(key)); }
 
-  public boolean isMouseDown(int button) { return downButtons.contains(button); }
-  public boolean wasMousePressed(int button) { return pressedButtons.contains(button); }
-  public boolean wasMouseReleased(int button) { return releasedButtons.contains(button); }
+  public void mouseDown(int button) { handleButton(InputCode.mouse(button), true); }
+  public void mouseUp(int button) { handleButton(InputCode.mouse(button), false); }
+
+  public boolean isMouseDown(int button) { return isDown(InputCode.mouse(button)); }
+  public boolean wasMousePressed(int button) { return wasPressed(InputCode.mouse(button)); }
+  public boolean wasMouseReleased(int button) { return wasReleased(InputCode.mouse(button)); }
+
+  public void gamepadButtonDown(int pad, String button) { handleButton(InputCode.gamepadButton(pad, button), true); }
+  public void gamepadButtonUp(int pad, String button) { handleButton(InputCode.gamepadButton(pad, button), false); }
+
+  public void setGamepadAxis(int pad, String axis, double value) {
+    InputCode code = InputCode.gamepadAxis(pad, axis);
+    axisValues.put(code, value);
+  }
+
+  public double getGamepadAxis(int pad, String axis) {
+    InputCode code = InputCode.gamepadAxis(pad, axis);
+    return axisValues.getOrDefault(code, 0.0);
+  }
+
+  public boolean isDown(InputCode code) { return down.contains(code); }
+  public boolean wasPressed(InputCode code) { return pressed.contains(code); }
+  public boolean wasReleased(InputCode code) { return released.contains(code); }
 
   public void setMousePosition(double x, double y) { this.mouseX = x; this.mouseY = y; }
   public double getMouseX() { return mouseX; }
@@ -45,22 +71,27 @@ public class Input {
   public double getScrollDeltaY() { return scrollDeltaY; }
 
   public void endFrame() {
-    pressedKeys.clear();
-    releasedKeys.clear();
-    pressedButtons.clear();
-    releasedButtons.clear();
+    pressed.clear();
+    released.clear();
     scrollDeltaY = 0;
   }
 
   public void reset() {
-    downKeys.clear();
-    pressedKeys.clear();
-    releasedKeys.clear();
-    downButtons.clear();
-    pressedButtons.clear();
-    releasedButtons.clear();
+    down.clear();
+    pressed.clear();
+    released.clear();
+    axisValues.clear();
     mouseX = 0;
     mouseY = 0;
     scrollDeltaY = 0;
+  }
+
+  private void handleButton(InputCode code, boolean downEvent) {
+    if (code == null) return;
+    if (downEvent) {
+      if (down.add(code)) pressed.add(code);
+    } else {
+      if (down.remove(code)) released.add(code);
+    }
   }
 }
