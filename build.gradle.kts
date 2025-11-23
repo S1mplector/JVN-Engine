@@ -39,6 +39,11 @@ subprojects {
       substitute(module("com.jvn:scripting")).using(project(":scripting"))
       substitute(module("com.jvn:audio-integration")).using(project(":audio-integration"))
     }
+    // Force consistent logback to avoid mixed versions at runtime
+    resolutionStrategy.force(
+      "ch.qos.logback:logback-classic:1.5.6",
+      "ch.qos.logback:logback-core:1.5.6"
+    )
   }
 
   extensions.configure<org.gradle.api.publish.PublishingExtension> {

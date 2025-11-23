@@ -80,7 +80,7 @@ public class JesVnBridge {
       vn.setInterop(new RuntimeVnInterop(engine));
       VnSettings settings = new VnSettings();
       if (current != null) copySettings(current.getState(), settings);
-      vn.getState().setSettings(settings);
+      copySettingsIntoState(settings, vn.getState());
       if (current != null && current.getAudioFacade() != null) {
         vn.setAudioFacade(current.getAudioFacade());
       }
@@ -106,6 +106,29 @@ public class JesVnBridge {
     to.setAutoPlayDelay(s.getAutoPlayDelay());
     to.setSkipUnreadText(s.isSkipUnreadText());
     to.setSkipAfterChoices(s.isSkipAfterChoices());
+    to.setPhysicsFixedStepMs(s.getPhysicsFixedStepMs());
+    to.setPhysicsMaxSubSteps(s.getPhysicsMaxSubSteps());
+    to.setPhysicsDefaultFriction(s.getPhysicsDefaultFriction());
+    to.setInputProfilePath(s.getInputProfilePath());
+    to.setInputProfileSerialized(s.getInputProfileSerialized());
+  }
+
+  private static void copySettingsIntoState(VnSettings src, VnState state) {
+    if (src == null || state == null) return;
+    VnSettings dst = state.getSettings();
+    if (dst == null) return;
+    dst.setTextSpeed(src.getTextSpeed());
+    dst.setBgmVolume(src.getBgmVolume());
+    dst.setSfxVolume(src.getSfxVolume());
+    dst.setVoiceVolume(src.getVoiceVolume());
+    dst.setAutoPlayDelay(src.getAutoPlayDelay());
+    dst.setSkipUnreadText(src.isSkipUnreadText());
+    dst.setSkipAfterChoices(src.isSkipAfterChoices());
+    dst.setPhysicsFixedStepMs(src.getPhysicsFixedStepMs());
+    dst.setPhysicsMaxSubSteps(src.getPhysicsMaxSubSteps());
+    dst.setPhysicsDefaultFriction(src.getPhysicsDefaultFriction());
+    dst.setInputProfilePath(src.getInputProfilePath());
+    dst.setInputProfileSerialized(src.getInputProfileSerialized());
   }
 
   private static String str(Map<String,Object> props, String key, String def) {
