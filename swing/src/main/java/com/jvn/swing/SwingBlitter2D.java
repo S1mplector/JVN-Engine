@@ -300,9 +300,6 @@ public class SwingBlitter2D implements Blitter2D {
   }
 
   @Override
-  public void setClipRect(double x, double y, double w, double h) { g2.setClip(new java.awt.geom.Rectangle2D.Double(x, y, w, h)); }
-
-  @Override
   public void fillPolygon(double[] xy) {
     if (xy == null || xy.length < 4 || xy.length % 2 != 0) return;
     Path2D p = new Path2D.Double();
@@ -374,12 +371,6 @@ public class SwingBlitter2D implements Blitter2D {
       cs[i] = new Color(rr, gg, bb, aa);
     }
     fillPaint = new RadialGradientPaint(new Point((int) cx, (int) cy), (float) r, fr, cs);
-  }
-
-  @Override
-  public void setTextAlign(String hAlign, String vAlign) {
-    if (hAlign != null) this.hAlign = hAlign.toLowerCase();
-    if (vAlign != null) this.vAlign = vAlign.toLowerCase();
   }
 
   private BufferedImage loadImage(String path) {
