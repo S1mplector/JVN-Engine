@@ -43,6 +43,40 @@ public class JesLoader {
     return load(in);
   }
 
+  /**
+   * Load and merge multiple JES scripts into a single scene. Scenes are merged in order:
+   * items/tilesets/maps/entities/bindings/timelines are appended.
+   */
+  public static JesScene2D loadMerged(List<InputStream> inputs) throws Exception {
+    if (inputs == null || inputs.isEmpty()) throw new IllegalArgumentException("No JES inputs provided");
+    JesAst.SceneDecl base = null;
+    for (InputStream in : inputs) {
+      if (in == null) continue;
+      List<JesToken> toks = JesTokenizer.tokenize(in);
+      JesAst.Program prog = new JesParser(toks).parseProgram();
+      if (prog.scenes.isEmpty()) continue;
+      JesAst.SceneDecl s = prog.scenes.get(0);
+      if (base == null) {
+        base = s;
+      } else {
+        mergeScenes(base, s);
+      }
+    }
+    if (base == null) throw new IllegalArgumentException("No scene defined across merged inputs");
+    return buildScene(base);
+  }
+
+  private static void mergeScenes(JesAst.SceneDecl base, JesAst.SceneDecl extra) {
+    if (base == null || extra == null) return;
+    base.items.addAll(extra.items);
+    base.tilesets.addAll(extra.tilesets);
+    base.maps.addAll(extra.maps);
+    base.entities.addAll(extra.entities);
+    base.bindings.addAll(extra.bindings);
+    base.timeline.addAll(extra.timeline);
+    // Keep base name; ignore extra name
+  }
+
   private static JesScene2D buildScene(JesAst.SceneDecl s) {
     JesScene2D scene = new JesScene2D();
 
@@ -218,6 +252,7 @@ public class JesLoader {
             double restitution = num(c, "restitution", 0.2);
             boolean stat = bool(c, "static", false);
             boolean sensor = bool(c, "sensor", false);
+            String onTrigger = str(c, "onTrigger", null);
             RigidBody2D body;
             if (shape.equals("box")) {
               double w = num(c, "w", 1);
@@ -237,6 +272,7 @@ public class JesLoader {
             Object fill = c.props.get("color"); if (fill instanceof double[] arr) vis.setColor(arr[0], arr[1], arr[2], arr[3]);
             scene.add(vis);
             scene.registerEntity(e.name, vis);
+            scene.registerPhysicsEntity(e.name, body, onTrigger);
           }
           case "Character2D" -> {
             String image = str(c, "spriteSheet", null);

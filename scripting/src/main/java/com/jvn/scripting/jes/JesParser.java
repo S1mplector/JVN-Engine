@@ -26,7 +26,7 @@ public class JesParser {
     Map.entry("Sprite2D", Set.of("image", "x", "y", "w", "h", "alpha", "originX", "originY", "sx", "sy", "sw", "sh", "dw", "dh")),
     Map.entry("Label2D", Set.of("text", "x", "y", "size", "bold", "color", "align")),
     Map.entry("ParticleEmitter2D", Set.of("x", "y", "emissionRate", "minLife", "maxLife", "minSize", "maxSize", "endSizeScale", "minSpeed", "maxSpeed", "minAngle", "maxAngle", "gravityY", "texture", "additive", "startColor", "endColor")),
-    Map.entry("PhysicsBody2D", Set.of("shape", "x", "y", "w", "h", "r", "mass", "restitution", "static", "sensor", "vx", "vy", "color")),
+    Map.entry("PhysicsBody2D", Set.of("shape", "x", "y", "w", "h", "r", "mass", "restitution", "static", "sensor", "vx", "vy", "color", "onTrigger")),
     Map.entry("Character2D", Set.of("spriteSheet", "frameW", "frameH", "cols", "drawW", "drawH", "x", "y", "startTileX", "startTileY", "speed", "originX", "originY", "animations", "startAnim", "dialogueId", "z", "controllable")),
     Map.entry("Stats", Set.of("maxHp", "hp", "maxMp", "mp", "atk", "def", "speed", "onDeathCall", "removeOnDeath")),
     Map.entry("Inventory", Set.of("slots", "items")),

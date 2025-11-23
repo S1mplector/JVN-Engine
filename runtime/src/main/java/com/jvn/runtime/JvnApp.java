@@ -17,6 +17,7 @@ import com.jvn.fx.FxLauncher;
 import com.jvn.fx.audio.FxAudioService;
 import com.jvn.core.audio.AudioFacade;
 import com.jvn.scripting.jes.JesLoader;
+import com.jvn.scripting.jes.runtime.JesScene2D;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
@@ -102,28 +103,7 @@ public class JvnApp {
     engine.start();
 
     if (jesScript != null) {
-      try {
-        AssetCatalog cat = new AssetCatalog();
-        InputStream in = cat.open(com.jvn.core.assets.AssetType.SCRIPT, jesScript);
-        var scene = JesLoader.load(in);
-        new JesVnBridge(engine).attach(scene);
-        engine.scenes().push(scene);
-      } catch (Exception e) {
-        log.warn("Failed to load JES script '{}': {}. Loading inline sample.", jesScript, e.toString());
-        try {
-          String sample = "scene \"Sample\" {\n" +
-              "  entity \"panel\" {\n" +
-              "    component Panel2D { x: 0.2 y: 0.2 w: 1.0 h: 0.6 fill: rgb(0.1,0.6,0.2,0.8) }\n" +
-              "  }\n" +
-              "}\n";
-          var in2 = new ByteArrayInputStream(sample.getBytes());
-          var scene = JesLoader.load(in2);
-          new JesVnBridge(engine).attach(scene);
-          engine.scenes().push(scene);
-        } catch (Exception ex) {
-          log.warn("Inline JES sample failed: {}", ex.toString());
-        }
-      }
+      loadJes(engine, jesScript);
     } else if (launchBilliards) {
       log.warn("Billiards module is not available; ignoring --billiards flag.");
     } else {
@@ -161,6 +141,45 @@ public class JvnApp {
       com.jvn.swing.SwingLauncher.launch(engine);
     } else {
       FxLauncher.launch(engine);
+    }
+  }
+
+  private static void loadJes(Engine engine, String jesScript) {
+    try {
+      AssetCatalog cat = new AssetCatalog();
+      String[] parts = jesScript.split("[,;]");
+      if (parts.length == 1) {
+        try (InputStream in = cat.open(AssetType.SCRIPT, jesScript)) {
+          JesScene2D scene = JesLoader.load(in);
+          new JesVnBridge(engine).attach(scene);
+          engine.scenes().push(scene);
+        }
+      } else {
+        java.util.List<InputStream> ins = new java.util.ArrayList<>();
+        for (String p : parts) {
+          String path = p.trim();
+          if (path.isEmpty()) continue;
+          ins.add(cat.open(AssetType.SCRIPT, path));
+        }
+        JesScene2D scene = JesLoader.loadMerged(ins);
+        new JesVnBridge(engine).attach(scene);
+        engine.scenes().push(scene);
+      }
+    } catch (Exception e) {
+      log.warn("Failed to load JES script '{}': {}. Loading inline sample.", jesScript, e.toString());
+      try {
+        String sample = "scene \"Sample\" {\n" +
+            "  entity \"panel\" {\n" +
+            "    component Panel2D { x: 0.2 y: 0.2 w: 1.0 h: 0.6 fill: rgb(0.1,0.6,0.2,0.8) }\n" +
+            "  }\n" +
+            "}\n";
+        var in2 = new ByteArrayInputStream(sample.getBytes());
+        var scene = JesLoader.load(in2);
+        new JesVnBridge(engine).attach(scene);
+        engine.scenes().push(scene);
+      } catch (Exception ex) {
+        log.warn("Inline JES sample failed: {}", ex.toString());
+      }
     }
   }
 }

@@ -31,6 +31,9 @@ public class JesScene2D extends Scene2DBase {
   private final Map<String, Inventory> inventories = new HashMap<>();
   private final Map<String, Equipment> equipmentByEntity = new HashMap<>();
   private final Map<String, Ai2D> aiByEntity = new HashMap<>();
+  private final Map<RigidBody2D, PhysicsInfo> physicsInfos = new HashMap<>();
+  private final Map<String, RigidBody2D> bodyByName = new HashMap<>();
+  private final Map<String, Double> scriptVars = new HashMap<>();
   private final Map<String, Consumer<Map<String,Object>>> callHandlers = new HashMap<>();
   private final Map<String, double[]> spawnPositions = new HashMap<>();
   private boolean paused = false;
@@ -107,6 +110,11 @@ public class JesScene2D extends Scene2DBase {
     int childIndex;
     final Map<Integer, ActionRuntime> childStates = new HashMap<>();
   }
+  private static class PhysicsInfo {
+    final String name;
+    final String onTrigger;
+    PhysicsInfo(String name, String onTrigger) { this.name = name; this.onTrigger = onTrigger; }
+  }
 
   public PhysicsWorld2D getWorld() { return world; }
   public void addCollisionTilemap(TileMap2D tm) { if (tm != null) collisionTilemaps.add(tm); }
@@ -124,6 +132,26 @@ public class JesScene2D extends Scene2DBase {
     if (name != null && !name.isBlank() && e != null && !named.containsKey(name)) {
       named.put(name, e);
       spawnPositions.put(name, new double[]{ e.getX(), e.getY() });
+    }
+  }
+  public void registerPhysicsEntity(String name, RigidBody2D body, String onTrigger) {
+    if (name == null || name.isBlank() || body == null) return;
+    physicsInfos.put(body, new PhysicsInfo(name, onTrigger));
+    bodyByName.put(name, body);
+    world.setSensorListener(this::handleSensorTrigger);
+  }
+
+  private void handleSensorTrigger(RigidBody2D sensor, RigidBody2D other) {
+    PhysicsInfo info = physicsInfos.get(sensor);
+    PhysicsInfo otherInfo = physicsInfos.get(other);
+    String call = info != null ? info.onTrigger : null;
+    Map<String,Object> props = new HashMap<>();
+    if (info != null) props.put("sensor", info.name);
+    if (otherInfo != null) props.put("other", otherInfo.name);
+    if (call != null && !call.isBlank()) {
+      invokeCall(call, props);
+    } else {
+      invokeCall("sensorHit", props);
     }
   }
   public void setTimeline(List<JesAst.TimelineAction> tl) {
@@ -228,6 +256,15 @@ public class JesScene2D extends Scene2DBase {
       handleUnequipItem(actualProps);
     } else if ("attack".equals(name)) {
       handleAttack(actualProps);
+    } else if ("pocketBall".equals(name)) {
+      handlePocket(actualProps);
+    } else if ("resetBalls".equals(name)) {
+      resetToSpawn();
+    } else if ("setLabelText".equals(name)) {
+      setLabelText(actualProps);
+    } else if ("removeEntity".equals(name)) {
+      String target = toStr(actualProps.get("target"), null);
+      if (target != null) removeEntity(target);
     }
     if (name != null) {
       triggeredEvents.add(name);
@@ -262,7 +299,15 @@ public class JesScene2D extends Scene2DBase {
   public boolean removeEntity(String name) {
     if (name == null) return false;
     Entity2D e = named.remove(name);
-    if (e != null) { remove(e); return true; }
+    if (e != null) {
+      remove(e);
+      RigidBody2D body = bodyByName.remove(name);
+      if (body != null) {
+        physicsInfos.remove(body);
+        world.removeBody(body);
+      }
+      return true;
+    }
     return false;
   }
 
@@ -879,6 +924,7 @@ public class JesScene2D extends Scene2DBase {
       case "spawnBox" -> { spawnBox(b.props); yield true; }
       case "moveHero" -> { moveHero(b.props); yield true; }
       case "interact" -> { interact(); yield true; }
+      case "resetBalls" -> { resetToSpawn(); yield true; }
       default -> false;
     };
     if (!handled && actionHandler != null) {
@@ -1591,6 +1637,55 @@ public class JesScene2D extends Scene2DBase {
     }
     if (amount <= 0) return;
     applyDamage(target, amount, attacker);
+  }
+
+  private void handlePocket(Map<String,Object> props) {
+    String ball = toStr(props.get("other"), null);
+    if (ball != null) {
+      removeEntity(ball);
+      // Track simple score
+      incrementVar("score", 1);
+      updateScoreLabel();
+    }
+  }
+
+  private void resetToSpawn() {
+    for (Map.Entry<String, Entity2D> entry : new java.util.HashMap<>(named).entrySet()) {
+      String name = entry.getKey();
+      Entity2D e = entry.getValue();
+      double[] spawn = spawnPositions.get(name);
+      if (spawn != null && spawn.length >= 2) {
+        e.setPosition(spawn[0], spawn[1]);
+      }
+      if (bodyByName.containsKey(name)) {
+        RigidBody2D b = bodyByName.get(name);
+        if (spawn != null && spawn.length >= 2) b.setPosition(spawn[0], spawn[1]);
+        b.setVelocity(0, 0);
+      }
+    }
+    scriptVars.put("score", 0.0);
+    updateScoreLabel();
+  }
+
+  private void setLabelText(Map<String,Object> props) {
+    String target = toStr(props.get("target"), null);
+    String text = toStr(props.get("text"), null);
+    if (target == null || text == null) return;
+    Entity2D e = named.get(target);
+    if (e instanceof com.jvn.core.scene2d.Label2D lbl) {
+      lbl.setText(text);
+    }
+  }
+
+  private void incrementVar(String key, double amount) {
+    if (key == null) return;
+    double cur = scriptVars.getOrDefault(key, 0.0);
+    scriptVars.put(key, cur + amount);
+  }
+
+  private void updateScoreLabel() {
+    double score = scriptVars.getOrDefault("score", 0.0);
+    setLabelText(java.util.Map.of("target", "score_label", "text", "Score: " + ((int) score)));
   }
 
   private void warpMap(Map<String,Object> props) {

@@ -1,0 +1,31 @@
+scene "billiards_overlay" {
+  # HUD overlay for billiards_base
+
+  entity "title" {
+    component Label2D {
+      text: "BILLIARDS (MERGED JES)"
+      x: 0.5 y: 0.08 size: 22 bold: true align: center
+      color: rgb(1,1,1,1)
+    }
+  }
+
+  entity "hint" {
+    component Label2D {
+      text: "Sensors pocket balls • R to reset rack"
+      x: 0.5 y: 0.12 size: 14 bold: false align: center
+      color: rgb(0.8,0.9,1,0.9)
+    }
+  }
+
+  entity "score_label" {
+    component Label2D {
+      text: "Score: 0"
+      x: 0.5 y: 0.16 size: 12 bold: true align: center
+      color: rgb(1,1,1,0.9)
+    }
+  }
+
+  # Simple overlay panels for score/side indicators
+  entity "panel_left" { component Panel2D { x: 0.02 y: 0.02 w: 0.12 h: 0.12 fill: rgb(0,0,0,0.35) } }
+  entity "panel_right" { component Panel2D { x: 0.86 y: 0.02 w: 0.12 h: 0.12 fill: rgb(0,0,0,0.35) } }
+}

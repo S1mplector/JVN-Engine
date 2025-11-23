@@ -1,0 +1,57 @@
+scene "billiards_pure" {
+  # Single-file pure JES billiards demo (no merging needed)
+
+  entity "table" { component Panel2D { x: 0 y: 0 w: 1.0 h: 1.0 fill: rgb(0.1, 0.35, 0.1, 1.0) } }
+
+  entity "title" {
+    component Label2D {
+      text: "BILLIARDS (PURE)"
+      x: 0.5 y: 0.08 size: 22 bold: true align: center
+      color: rgb(1,1,1,1)
+    }
+  }
+  entity "hint" {
+    component Label2D {
+      text: "Balls start with an impulse; sensors pocket balls."
+      x: 0.5 y: 0.12 size: 14 bold: false align: center
+      color: rgb(0.8,0.9,1,0.9)
+    }
+  }
+  entity "score_label" {
+    component Label2D {
+      text: "Score: 0"
+      x: 0.5 y: 0.16 size: 12 bold: true align: center
+      color: rgb(1,1,1,0.9)
+    }
+  }
+
+  # Rails (static boxes)
+  entity "rail_top"    { component PhysicsBody2D { shape: box x: 0.05 y: 0.05 w: 0.9 h: 0.02 static: true restitution: 1.0 } }
+  entity "rail_bottom" { component PhysicsBody2D { shape: box x: 0.05 y: 0.93 w: 0.9 h: 0.02 static: true restitution: 1.0 } }
+  entity "rail_left"   { component PhysicsBody2D { shape: box x: 0.05 y: 0.07 w: 0.02 h: 0.86 static: true restitution: 1.0 } }
+  entity "rail_right"  { component PhysicsBody2D { shape: box x: 0.93 y: 0.07 w: 0.02 h: 0.86 static: true restitution: 1.0 } }
+
+  # Pockets as sensors with pocketBall call
+  entity "pocket_tl" { component PhysicsBody2D { shape: circle x: 0.05 y: 0.05 r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+  entity "pocket_tr" { component PhysicsBody2D { shape: circle x: 0.95 y: 0.05 r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+  entity "pocket_bl" { component PhysicsBody2D { shape: circle x: 0.05 y: 0.95 r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+  entity "pocket_br" { component PhysicsBody2D { shape: circle x: 0.95 y: 0.95 r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+  entity "pocket_cl" { component PhysicsBody2D { shape: circle x: 0.05 y: 0.5  r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+  entity "pocket_cr" { component PhysicsBody2D { shape: circle x: 0.95 y: 0.5  r: 0.03 static: true sensor: true onTrigger: "pocketBall" } }
+
+  # Rack (triangular) – positions in normalized space
+  entity "cue_ball" { component PhysicsBody2D { shape: circle x: 0.25 y: 0.5 r: 0.015 restitution: 0.98 vx: 0.9 vy: 0.0 } }
+  entity "b1"  { component PhysicsBody2D { shape: circle x: 0.65 y: 0.50 r: 0.015 restitution: 0.98 } }
+  entity "b2"  { component PhysicsBody2D { shape: circle x: 0.68 y: 0.515 r: 0.015 restitution: 0.98 } }
+  entity "b3"  { component PhysicsBody2D { shape: circle x: 0.68 y: 0.485 r: 0.015 restitution: 0.98 } }
+  entity "b4"  { component PhysicsBody2D { shape: circle x: 0.71 y: 0.53 r: 0.015 restitution: 0.98 } }
+  entity "b5"  { component PhysicsBody2D { shape: circle x: 0.71 y: 0.50 r: 0.015 restitution: 0.98 } }
+  entity "b6"  { component PhysicsBody2D { shape: circle x: 0.71 y: 0.47 r: 0.015 restitution: 0.98 } }
+  entity "b7"  { component PhysicsBody2D { shape: circle x: 0.74 y: 0.545 r: 0.015 restitution: 0.98 } }
+  entity "b8"  { component PhysicsBody2D { shape: circle x: 0.74 y: 0.515 r: 0.015 restitution: 0.98 } }
+  entity "b9"  { component PhysicsBody2D { shape: circle x: 0.74 y: 0.485 r: 0.015 restitution: 0.98 } }
+  entity "b10" { component PhysicsBody2D { shape: circle x: 0.74 y: 0.455 r: 0.015 restitution: 0.98 } }
+
+  # Reset binding: R resets rack/score
+  on key "R" do resetBalls
+}
